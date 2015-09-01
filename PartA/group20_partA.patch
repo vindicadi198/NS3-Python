@@ -1,0 +1,2368 @@
+Index: python-demo/binding.pyx
+===================================================================
+new file mode 100644
+--- /dev/null
++++ b/python-demo/binding.pyx
+@@ -0,0 +1,149 @@
++from cpython.ref cimport Py_INCREF, Py_DECREF
++
++cdef extern from "ns3/python-model.h":
++    ctypedef struct Bytes:
++        unsigned char* data
++        unsigned int length
++
++    ctypedef struct Session:
++        void* remoteIpBlob
++        void* userData
++
++    ctypedef double (*ClientConnectionCloseHandler) (void* user_data)
++    ctypedef void (*ClientFreeResourcesHandler) (Session* user_data)
++    ctypedef void* (*AcceptHandler)(void* user_data, unsigned char byte1, unsigned char byte2, unsigned char byte3, unsigned char byte4, unsigned short port)
++    ctypedef double (*DataReceiveHandler) (void* user_data, unsigned char* data, unsigned short length)
++    ctypedef void (*ClientDataReceiveHandler) (void* user_data, unsigned char* data, unsigned short length)
++    ctypedef void (*ConnectionCloseHandler) (void* user_data)
++    ctypedef void (*ConnectionErrorHandler) (void* user_data)
++    ctypedef Bytes (*DataSendHandler) (void* user_data, unsigned int length)
++    ctypedef void (*FreeResourcesHandler) (void* user_data)
++    ctypedef void (*NotifyClientPort) (void* user_data, unsigned int port)
++
++cdef extern from "ns3/tcp-server.h":
++    void SetServerAcceptHandler(int nodeIndex, int applicationIndex, AcceptHandler handler, void* userData)
++    void SetServerDataReceiveHandler(int nodeIndex, int applicationIndex, DataReceiveHandler handler)
++    void SetServerConnectionCloseHandler(int nodeIndex,int applicationIndex, ConnectionCloseHandler handler)
++    void SetServerConnectionErrorHandler(int nodeIndex,int applicationIndex, ConnectionErrorHandler handler)
++    void SetServerDataSendHandler(int nodeIndex,int applicationIndex, DataSendHandler handler)
++    void SetServerFreeResourcesHandler(int nodeIndex,int applicationIndex, FreeResourcesHandler handler)
++
++cdef extern from "ns3/tcp-client.h":
++    void ClientEstablishSession(int nodeIndex, int applicationIndex, double time, const char* remoteIp, unsigned short port, void* userData, void* remoteIpBlob)
++
++cdef extern from "ns3/tcp-client.h" namespace "ns3":
++    void ClientSetHandlers(int nodeIndex, int applicationIndex, ClientDataReceiveHandler receiveHandler, DataSendHandler sendHandler, ClientFreeResourcesHandler freeHandler, ClientConnectionCloseHandler closeHandler, ConnectionErrorHandler errorHandler, NotifyClientPort notifier)
++
++cdef public void* cythonAcceptHandler(void* user_data, unsigned char byte1, unsigned char byte2, unsigned char byte3, unsigned char byte4, unsigned short port) with gil:
++    result=(<object> user_data)(byte1, byte2, byte3, byte4, port)
++    Py_INCREF(result)
++    return <void*>result
++
++cdef public double cythonDataReceiveHandler (void* user_data, unsigned char* data, unsigned short length) with gil:
++    _data=data[:length]
++    return (<object> user_data).handle_read(_data)
++
++cdef public void cythonClientDataReceiveHandler (void* user_data, unsigned char* data, unsigned short length) with gil:
++    _data=data[:length]
++    (<object> user_data).handle_read(_data)
++
++cdef public void cythonConnectionCloseHandler (void* user_data) with gil:
++    obj=(<object> user_data)
++    obj.handle_peer_close()
++    Py_DECREF(obj)
++
++cdef public double cythonClientConnectionCloseHandler (void* user_data) with gil:
++    obj=(<object> user_data)
++    return obj.handle_peer_close()
++
++cdef public void cythonConnectionErrorHandler (void* user_data) with gil:
++    obj=(<object> user_data)
++    obj.handle_peer_error()
++    Py_DECREF(obj)
++
++cdef public void cythonFreeResourcesHandler (void* user_data) with gil:
++    Py_DECREF((<object> user_data))
++
++cdef public void cythonClientFreeResourcesHandler(Session* session) with gil:
++    Py_DECREF(<object> session.userData)
++    Py_DECREF(<object> session.remoteIpBlob)
++
++cdef public Bytes cythonDataSendHandler (void* user_data, unsigned int length) with gil:
++    cdef Bytes bytes
++    stuff_to_send=(<object> user_data).handle_send(length)
++    bytes.data=stuff_to_send
++    bytes.length=len(stuff_to_send)
++    return bytes
++
++cdef public void cythonNotifyClientPort(void* user_data, unsigned int port) with gil:
++    obj=(<object> user_data)
++    obj.set_client_port(port)
++
++def setHandlers(node_id, application_index, accept_handler):
++    """
++    Sets up the cython handlers correctly for the Tcp Server application with index `application_index` running on node with
++    index `node_index`. Additionally, sets up the connection accept handler to the object provided.
++    
++    :param: node_id the global index of the node to install the handlers on
++    :param: application_index the index of the TCP Server application on the node
++    :param: accept_handler pointer to python function that will be called when a new connection is requested
++    
++    .. note ::
++      This function will automatically adjust reference counts to ensure that
++        1. The connection accept handler will not be garbage collected till the server closes
++        2. The actual request handlers will not be garbage collected till they are done sending data
++    
++    .. warning ::
++    
++      This function has to be called before any attempt to establish connections to the server else segfaults are guaranteed
++    
++    .. warning ::
++    
++      This function does not perform any safety checks whatsoever. Using with wrong indices can lead to segfaults
++    """
++    Py_INCREF(accept_handler)
++    SetServerAcceptHandler(node_id, application_index, cythonAcceptHandler, <void*> accept_handler)
++    SetServerDataReceiveHandler(node_id, application_index, cythonDataReceiveHandler)
++    SetServerConnectionCloseHandler(node_id, application_index, cythonConnectionCloseHandler)
++    SetServerConnectionErrorHandler(node_id, application_index, cythonConnectionErrorHandler)
++    SetServerDataSendHandler(node_id, application_index, cythonDataSendHandler)
++    SetServerFreeResourcesHandler(node_id, application_index, cythonFreeResourcesHandler)
++
++
++def client_connect_handlers(node_index,application_index):
++    """
++    Sets up the cython handlers correctly for the TcpClient application
++    with index `application_index` running on node with index `node_index`.
++    
++    :param: node_id the global index of the node to install the handlers on
++    :param: application_index the index of the TcpClient application on the node
++    
++    .. warning ::
++    
++      This function has to be called before any attempt to establish
++      connections from the client else segfaults are guaranteed
++    
++    .. warning ::
++    
++      This function does not perform any safety checks whatsoever.
++      Using with wrong indices can lead to segfaults
++    """
++    ClientSetHandlers(node_index, application_index, cythonClientDataReceiveHandler, cythonDataSendHandler, cythonClientFreeResourcesHandler, cythonClientConnectionCloseHandler, cythonConnectionErrorHandler, cythonNotifyClientPort)
++
++def client_establish_session(node_index, application_index, time, remote_ip, remote_port, object):
++    """
++    Establishes a new session that will repeatedly connect to the server at `remote_ip` running on port `remote_port`
++    
++    :param: node_id the global index of the node to install the handlers on
++    :param: application_index the index of the Client application on the node
++    :param: time the time at which the browsing session starts
++    :param: remote_ip the remote server's address
++    :param: remote_port the port on which remote server is running
++    
++    .. note ::
++    
++        This function will automatically adjust python reference counts to ensure that the handler and the IP string are not garbage collected till the session ends
++    """
++    Py_INCREF(object)
++    Py_INCREF(remote_ip)
++    ClientEstablishSession(node_index, application_index, time, remote_ip, remote_port, <void*>object, <void*> remote_ip)
+Index: python-demo/configure
+===================================================================
+new file mode 100755
+--- /dev/null
++++ b/python-demo/configure
+@@ -0,0 +1,24 @@
++echo Creating Makefile
++
++NS3_LDFLAGS=`find ../build -maxdepth 1 -type f -name "*.so" -printf "%f "|sed -e 's/\.so//g;s/lib/-l/g'`
++echo NS3_LDFLAGS=-L../build $NS3_LDFLAGS >Makefile
++
++PYTHON_CFLAGS=`python-config --cflags`
++echo PYTHON_CFLAGS=$PYTHON_CFLAGS >>Makefile
++
++PYTHON_LDFLAGS=`python-config --libs`
++echo PYTHON_LDFLAGS=$PYTHON_LDFLAGS >>Makefile
++
++cat >>Makefile <<"EOF"
++NS3_CFLAGS=-I../build
++
++CXX=g++
++CFLAGS=-O2
++
++binding.so: binding.cpp
++	$(CXX) -fPIC -o binding.so --shared $(NS3_CFLAGS) $(PYTHON_CFLAGS) $(NS3_LDFLAGS) $(PYTHON_LDFLAGS) binding.cpp
++
++binding.cpp: binding.pyx
++	cython --line-directives --cplus binding.pyx
++
++EOF
+Index: python-demo/demo.py
+===================================================================
+new file mode 100644
+--- /dev/null
++++ b/python-demo/demo.py
+@@ -0,0 +1,114 @@
++#!/usr/bin/env python
++from __future__ import print_function
++
++import sys
++
++import ns.core
++import ns.internet
++import ns.mobility
++import ns.applications
++
++import binding
++
++from proto.client import TcpClient
++from proto.server import TcpRequestHandler, TcpServer
++from network.creator import NetworkCreator
++
++
++def create_topology():
++    """
++    This function uses :class:`network.creator.NetworkCreator` to create the topology required for the assignment
++    """
++    positions = (
++        ns.mobility.Vector(0, 20, 0),
++        ns.mobility.Vector(10, 20, 0),
++        ns.mobility.Vector(20, 20, 0),
++
++        ns.mobility.Vector(20, 10, 0),
++        ns.mobility.Vector(10, 10, 0),
++        ns.mobility.Vector(0, 10, 0),
++
++        ns.mobility.Vector(0, 0, 0),
++        ns.mobility.Vector(10, 0, 0),
++        ns.mobility.Vector(20, 0, 0))
++
++    network_creator = NetworkCreator(9, positions, "192.168.0.0", "255.255.255.0", "100Kbps")
++
++    network_creator.create_link(0, 1)
++    network_creator.create_link(1, 2)
++    network_creator.create_link(2, 3)
++    network_creator.create_link(3, 4)
++    network_creator.create_link(4, 5)
++    network_creator.create_link(5, 6)
++    network_creator.create_link(6, 7)
++    network_creator.create_link(7, 8)
++    network_creator.create_link(0, 5)
++    network_creator.create_link(1, 4)
++    network_creator.create_link(4, 7)
++    network_creator.create_link(3, 8)
++
++    return network_creator
++
++# Set up flow 1
++
++
++def create_browsing_session():
++    """
++    This function sets up the browsing session. It sets up routing both for data and ACKs and installs appropriate
++    applications on both the source and the destination node.
++
++    .. note ::
++
++        This function does not set up tracing due to limitations in the NS3 Python API
++    """
++    # Forward routing
++    dest_address_flow_1 = ns.network.Ipv4Address("192.168.12.2")
++    static_routes[0].AddHostRouteTo(dest_address_flow_1, 1)
++    static_routes[1].AddHostRouteTo(dest_address_flow_1, 2)
++    static_routes[2].AddHostRouteTo(dest_address_flow_1, 2)
++
++    # Reverse routing
++    source_address_flow_1 = ns.network.Ipv4Address("192.168.1.1")
++    static_routes[8].AddHostRouteTo(source_address_flow_1, 2)
++    static_routes[3].AddHostRouteTo(source_address_flow_1, 1)
++    static_routes[2].AddHostRouteTo(source_address_flow_1, 1)
++
++    dest_socket_addr_flow_1 = ns.network.InetSocketAddress("192.168.12.2", 32767)
++
++    # Now, create the sources
++    source_flow_1 = ns.applications.TcpClientHelper("ns3::TcpSocketFactory")
++    source_flow_1_app = source_flow_1.Install(network.nodes.Get(0))
++    binding.client_connect_handlers(0, 0)
++    binding.client_establish_session(0, 0, 1e-6, "192.168.12.2", 32767, TcpClient("Session1"))
++    source_flow_1_app.Start(ns.core.Seconds(0.0))
++
++    source_flow_2 = ns.applications.TcpClientHelper("ns3::TcpSocketFactory")
++    source_flow_2_app = source_flow_2.Install(network.nodes.Get(3))
++    binding.client_connect_handlers(3, 0)
++    binding.client_establish_session(3, 0, 1e-6, "192.168.12.2", 32767, TcpClient("Session2"))
++    source_flow_2_app.Start(ns.core.Seconds(0.0))
++
++    # Now, create the sink
++    sink_flow_1 = ns.applications.TcpServerHelper("ns3::TcpSocketFactory", dest_socket_addr_flow_1)
++    sink_flow_1_app = sink_flow_1.Install(network.nodes.Get(8))
++    sink_flow_1_app.Start(ns.core.Seconds(0.0))
++    p2p = ns.point_to_point.PointToPointHelper()
++    p2p.EnablePcap('node8', 8, 2)
++
++if __name__ == "__main__":
++    cmdLine = ns.core.CommandLine()
++    cmdLine.Parse(sys.argv)
++
++    network = create_topology()
++    static_routes = network.get_static_routes()
++
++    ns.core.Config.SetDefault("ns3::TcpSocket::SegmentSize", ns.core.UintegerValue(512))
++    ns.core.Config.SetDefault("ns3::TcpSocket::SndBufSize",ns.core.UintegerValue(4294967295))
++    # Create the browsing session
++    create_browsing_session()
++    server = TcpServer("TestServer")
++    binding.setHandlers(8, 0, server.handle_accept)
++
++    ns.core.Simulator.Stop(ns.core.Seconds(8000))
++    ns.core.Simulator.Run()
++    ns.core.Simulator.Destroy()
+Index: python-demo/network/__init__.py
+===================================================================
+new file mode 100644
+Index: python-demo/network/creator.py
+===================================================================
+new file mode 100644
+--- /dev/null
++++ b/python-demo/network/creator.py
+@@ -0,0 +1,68 @@
++from __future__ import print_function
++
++import ns.network
++import ns.mobility
++import ns.point_to_point
++
++
++class NetworkCreator:
++
++    """
++    This class creates an arbitrary network comprising of identical point to point links. It uses a constant position
++    mobility model to ensure that the network renders correctly in the visualizer. It simplifies the creation of
++    multiple point to point links and also automatically handles IP address assignment.
++    """
++
++    def __init__(self, num_nodes, positions, network, subnet, data_rate):
++        """
++        This function creates a new instance of the network creator containing `num_nodes` nodes placed in positions
++        specified by `positions`. Point to point links created by this `NetworkCreator` will have the data rate
++        specified by `data_rate`, and will have IP addresses assigned in networks similar to the one specified by
++        `network` and `subnet`.
++        """
++        # create the nodes comprising the network
++        self.nodes = ns.network.NodeContainer()
++        self.nodes.Create(num_nodes)
++
++        # set the positions of the nodes
++        self.mobility = ns.mobility.MobilityHelper()
++        self.position_alloc = ns.mobility.ListPositionAllocator()
++        for position in positions:
++            self.position_alloc.Add(position)
++        self.mobility.SetPositionAllocator(self.position_alloc)
++        self.mobility.SetMobilityModel("ns3::ConstantPositionMobilityModel")
++        self.mobility.Install(self.nodes)
++
++        # fix the data rate for point to point links created by this network creator
++        self.point_to_point = ns.point_to_point.PointToPointHelper()
++        self.point_to_point.SetDeviceAttribute("DataRate", ns.core.StringValue(data_rate))
++
++        # install IPv4 support onto the nodes
++        self.stack = ns.internet.InternetStackHelper()
++        self.stack.Install(self.nodes)
++        self.allocator = ns.internet.Ipv4AddressHelper()
++        self.allocator.SetBase(ns.network.Ipv4Address(network), ns.network.Ipv4Mask(subnet))
++
++    def create_link(self, index1, index2):
++        """
++        This code creates a new point to point link between the node at index `index1` and the node at index `index2`. It
++        then proceeds to assign an IP address to the nodes automatically.
++
++        :return: The NetDeviceContainer
++        """
++        container = self.point_to_point.Install(self.nodes.Get(index1), self.nodes.Get(index2))
++        self.allocator.NewNetwork()
++        self.allocator.Assign(container)
++        return container
++
++    def get_static_routes(self):
++        """
++        This function extracts the static routing tables from the nodes in this `NetworkCreator`
++        :return: an array containing the static routing tables
++        """
++        routing_helper = ns.internet.Ipv4StaticRoutingHelper()
++        ipv4_id = ns.internet.Ipv4.GetTypeId()
++        static_routes = []
++        for i in xrange(0, self.nodes.GetN()):
++            static_routes.append((routing_helper.GetStaticRouting(self.nodes.Get(i).GetObject(ipv4_id))))
++        return static_routes
+Index: python-demo/proto/__init__.py
+===================================================================
+new file mode 100644
+Index: python-demo/proto/client.py
+===================================================================
+new file mode 100644
+--- /dev/null
++++ b/python-demo/proto/client.py
+@@ -0,0 +1,104 @@
++from __future__ import print_function
++import sys
++
++import ns.core
++import ns.internet
++import ns.mobility
++import ns.applications
++
++
++class TcpClient:
++    """
++    Implements the sample TCP Client handler
++    ALL `handle_` methods defined below MUST be implemented to avoid segfaults
++    (Even if a method needs to do nothing, implement it,
++    making it a no-op by setting its body to 'pass')
++    """
++    def __init__(self, name):
++        self.name = name
++        self.more_to_send = 0
++        self.request = ''
++        self.tryID = 0
++        self.start = 0
++        self.stop = -1
++        self.receivedDataSize = 0
++
++
++    def handle_read(self, data):
++        """
++        Called when new data is received at the socket
++        and generates the random variable for read time
++        """
++        print(self.name, "received", data)
++        self.receivedDataSize = self.receivedDataSize + len(data)
++    
++
++    def set_client_port(self, port):
++        """
++        Called when the connection is initialized with port
++        as the parameter
++        """
++        print("I am at port", port)
++    
++    def handle_send(self, length):
++        """
++        Called when the socket is free and data has to be sent with
++        the max capacity of length.
++        
++        .. note ::
++        
++	    If `length` bytes of data is sent then the connection is 
++	    assumed to have some more data to be sent or else the connection
++	    is terminated
++	    
++        :return: Data in string format.
++        """
++        print(self.name, "needs to send", length, "bytes")
++        import copy
++        get_req = ''
++        if(self.more_to_send == 0):
++          self.request = 'Hello from TCP Client'
++          get_req = self.request
++          self.start = 0
++          self.stop = len(self.request)
++          if(len(self.request)>length):
++            get_req = self.request[0:length]
++            self.more_to_send = 1
++            self.start = length
++        else:
++          get_req = self.request[start:start+length]
++          self.start = self.start + length
++          if(self.start >= self.stop):
++            self.more_to_send = 0
++        return get_req    
++    
++    def handle_peer_close(self):
++        """
++        Called when the connection is terminated.
++        
++        .. note ::
++        
++	    Server sends the FIN, ACK packet to terminate the connection by four way hand shake
++        """
++        print("Peer closed the connection")
++        self.receivedDataSize = 0
++        self.start = 0
++        self.stop = -1
++        self.more_to_send = 0
++        self.tryID = self.tryID + 1
++        if(self.tryID > 20):
++            return -1
++        return 0
++    
++    def handle_peer_error(self):
++        """
++        This function is called when the connection is being dropped due to
++        errors.
++        """
++        print("Connection error")
++    
++    def __del__(self):
++        """
++        This function is called when the C side of the code deallocates resources
++        """
++        print(self.name, "died!")
+Index: python-demo/proto/server.py
+===================================================================
+new file mode 100644
+--- /dev/null
++++ b/python-demo/proto/server.py
+@@ -0,0 +1,109 @@
++from __future__ import print_function
++import sys
++
++import ns.core
++import ns.internet
++import ns.mobility
++import ns.applications
++
++
++class TcpRequestHandler:
++
++    """
++    Implements a sample TCP request handler
++    ALL handle_ methods defined below MUST be implemented to avoid segfaults
++    (Even if a method needs to do nothing, implement it,
++     making it a no-op by setting its body to 'pass')
++    """
++
++    def __init__(self, ip):
++        """
++        Intialize the TcpRequestHandler with instance variables ip
++        
++        """
++        self.ip = ip
++        
++
++    def handle_read(self, data):
++        """
++        Called when new data is received at the socket
++        Must return a double representing the number of seconds
++        (in simulation time) after which this server will send data
++
++        If the server does not currently plan to send data
++        (or if the incoming TCP request is not yet complete)
++        this method should return a double less than zero
++        
++        :return:  The time after which the server will send data to client
++        """
++        client_params = self.ip.split(':')
++        self.dataSent = 0
++        self.randstr = 'Hello from TCP Server'
++        self.packetDataLength = len(self.randstr)
++        self.flag = 0
++            
++            
++        return 0
++
++    def handle_send(self, length):
++        """
++        Called when the socket is ready to accept more data
++        At most length bytes must be returned
++
++        If the actual data returned is less than length bytes
++        the response is assumed to have been sent completely
++        and the connection is terminated
++        
++        :return: Data to be sent to client in the string format
++        """
++        dataToBeSent = ''
++        if(self.packetDataLength > length):
++            dataToBeSent = self.randstr[self.dataSent:self.dataSent + length]
++            self.dataSent += length
++            self.packetDataLength -= length
++        else:
++            dataToBeSent = self.randstr[self.dataSent:self.dataSent + self.packetDataLength]
++            self.dataSent += self.packetDataLength
++        return dataToBeSent
++
++    def handle_peer_close(self):
++        """
++        This function is called when the peer closes the connection
++
++        .. note ::
++
++	    This function will NOT be called when the connection
++	    closure is initiated by this node by sending less data than requested
++	    via handle_send
++        """
++        print("Peer", self.ip, "closed the connection")
++
++    def handle_peer_error(self):
++        """
++        This function is called when the connection is being dropped due to
++        errors.
++        """
++        print("Connection from", self.ip, "closed due to errors")
++
++    def __del__(self):
++        """
++        This function is called when the C side of the code deallocates resources
++        """
++        print("Handler for connection from", self.ip, "died!")
++
++
++class TcpServer:
++
++    def __init__(self, name):
++        self.name = name
++
++    def handle_accept(self, byte1, byte2, byte3, byte4, source_port):
++        """
++        Called when ever there is a connection request from client.
++        
++        :return:  :class:`http.server.TcpRequestHandler` for the client
++        """
++        ip = str(byte1) + "." + str(byte2) + "." + str(byte3) + "." + str(byte4) + ":" + str(source_port)
++        print(self.name, " received connection request from ", ip, sep='')
++        handler = TcpRequestHandler(ip)
++        return handler
+Index: src/applications/bindings/modulegen__gcc_ILP32.py
+===================================================================
+--- a/src/applications/bindings/modulegen__gcc_ILP32.py
++++ b/src/applications/bindings/modulegen__gcc_ILP32.py
+@@ -174,6 +174,10 @@
+     module.add_class('Tag', import_from_module='ns.network', parent=root_module['ns3::ObjectBase'])
+     ## tag-buffer.h (module 'network'): ns3::TagBuffer [class]
+     module.add_class('TagBuffer', import_from_module='ns.network')
++    ## tcp-client-helper.h (module 'applications'): ns3::TcpClientHelper [class]
++    module.add_class('TcpClientHelper')
++    ## tcp-server-helper.h (module 'applications'): ns3::TcpServerHelper [class]
++    module.add_class('TcpServerHelper')
+     ## type-id.h (module 'core'): ns3::TypeId [class]
+     module.add_class('TypeId', import_from_module='ns.core')
+     ## type-id.h (module 'core'): ns3::TypeId::AttributeFlag [enumeration]
+@@ -480,6 +484,10 @@
+     module.add_class('SimpleChannel', import_from_module='ns.network', parent=root_module['ns3::Channel'])
+     ## simple-net-device.h (module 'network'): ns3::SimpleNetDevice [class]
+     module.add_class('SimpleNetDevice', import_from_module='ns.network', parent=root_module['ns3::NetDevice'])
++    ## tcp-client.h (module 'applications'): ns3::TcpClient [class]
++    module.add_class('TcpClient', parent=root_module['ns3::Application'])
++    ## tcp-server.h (module 'applications'): ns3::TcpServer [class]
++    module.add_class('TcpServer', parent=root_module['ns3::Application'])
+     ## nstime.h (module 'core'): ns3::TimeValue [class]
+     module.add_class('TimeValue', import_from_module='ns.core', parent=root_module['ns3::AttributeValue'])
+     ## type-id.h (module 'core'): ns3::TypeIdChecker [class]
+@@ -673,6 +681,8 @@
+     register_Ns3SystemWallClockMs_methods(root_module, root_module['ns3::SystemWallClockMs'])
+     register_Ns3Tag_methods(root_module, root_module['ns3::Tag'])
+     register_Ns3TagBuffer_methods(root_module, root_module['ns3::TagBuffer'])
++    register_Ns3TcpClientHelper_methods(root_module, root_module['ns3::TcpClientHelper'])
++    register_Ns3TcpServerHelper_methods(root_module, root_module['ns3::TcpServerHelper'])
+     register_Ns3TypeId_methods(root_module, root_module['ns3::TypeId'])
+     register_Ns3TypeIdAttributeInformation_methods(root_module, root_module['ns3::TypeId::AttributeInformation'])
+     register_Ns3TypeIdTraceSourceInformation_methods(root_module, root_module['ns3::TypeId::TraceSourceInformation'])
+@@ -814,6 +824,8 @@
+     register_Ns3ReceiveListErrorModel_methods(root_module, root_module['ns3::ReceiveListErrorModel'])
+     register_Ns3SimpleChannel_methods(root_module, root_module['ns3::SimpleChannel'])
+     register_Ns3SimpleNetDevice_methods(root_module, root_module['ns3::SimpleNetDevice'])
++    register_Ns3TcpClient_methods(root_module, root_module['ns3::TcpClient'])
++    register_Ns3TcpServer_methods(root_module, root_module['ns3::TcpServer'])
+     register_Ns3TimeValue_methods(root_module, root_module['ns3::TimeValue'])
+     register_Ns3TypeIdChecker_methods(root_module, root_module['ns3::TypeIdChecker'])
+     register_Ns3TypeIdValue_methods(root_module, root_module['ns3::TypeIdValue'])
+@@ -3755,6 +3767,58 @@
+                    [param('uint8_t', 'v')])
+     return
+ 
++def register_Ns3TcpClientHelper_methods(root_module, cls):
++    ## tcp-client-helper.h (module 'applications'): ns3::TcpClientHelper::TcpClientHelper(ns3::TcpClientHelper const & arg0) [copy constructor]
++    cls.add_constructor([param('ns3::TcpClientHelper const &', 'arg0')])
++    ## tcp-client-helper.h (module 'applications'): ns3::TcpClientHelper::TcpClientHelper(std::string protocol) [constructor]
++    cls.add_constructor([param('std::string', 'protocol')])
++    ## tcp-client-helper.h (module 'applications'): ns3::ApplicationContainer ns3::TcpClientHelper::Install(ns3::NodeContainer c) const [member function]
++    cls.add_method('Install', 
++                   'ns3::ApplicationContainer', 
++                   [param('ns3::NodeContainer', 'c')], 
++                   is_const=True)
++    ## tcp-client-helper.h (module 'applications'): ns3::ApplicationContainer ns3::TcpClientHelper::Install(ns3::Ptr<ns3::Node> node) const [member function]
++    cls.add_method('Install', 
++                   'ns3::ApplicationContainer', 
++                   [param('ns3::Ptr< ns3::Node >', 'node')], 
++                   is_const=True)
++    ## tcp-client-helper.h (module 'applications'): ns3::ApplicationContainer ns3::TcpClientHelper::Install(std::string nodeName) const [member function]
++    cls.add_method('Install', 
++                   'ns3::ApplicationContainer', 
++                   [param('std::string', 'nodeName')], 
++                   is_const=True)
++    ## tcp-client-helper.h (module 'applications'): void ns3::TcpClientHelper::SetAttribute(std::string name, ns3::AttributeValue const & value) [member function]
++    cls.add_method('SetAttribute', 
++                   'void', 
++                   [param('std::string', 'name'), param('ns3::AttributeValue const &', 'value')])
++    return
++
++def register_Ns3TcpServerHelper_methods(root_module, cls):
++    ## tcp-server-helper.h (module 'applications'): ns3::TcpServerHelper::TcpServerHelper(ns3::TcpServerHelper const & arg0) [copy constructor]
++    cls.add_constructor([param('ns3::TcpServerHelper const &', 'arg0')])
++    ## tcp-server-helper.h (module 'applications'): ns3::TcpServerHelper::TcpServerHelper(std::string protocol, ns3::Address address) [constructor]
++    cls.add_constructor([param('std::string', 'protocol'), param('ns3::Address', 'address')])
++    ## tcp-server-helper.h (module 'applications'): ns3::ApplicationContainer ns3::TcpServerHelper::Install(ns3::NodeContainer c) const [member function]
++    cls.add_method('Install', 
++                   'ns3::ApplicationContainer', 
++                   [param('ns3::NodeContainer', 'c')], 
++                   is_const=True)
++    ## tcp-server-helper.h (module 'applications'): ns3::ApplicationContainer ns3::TcpServerHelper::Install(ns3::Ptr<ns3::Node> node) const [member function]
++    cls.add_method('Install', 
++                   'ns3::ApplicationContainer', 
++                   [param('ns3::Ptr< ns3::Node >', 'node')], 
++                   is_const=True)
++    ## tcp-server-helper.h (module 'applications'): ns3::ApplicationContainer ns3::TcpServerHelper::Install(std::string nodeName) const [member function]
++    cls.add_method('Install', 
++                   'ns3::ApplicationContainer', 
++                   [param('std::string', 'nodeName')], 
++                   is_const=True)
++    ## tcp-server-helper.h (module 'applications'): void ns3::TcpServerHelper::SetAttribute(std::string name, ns3::AttributeValue const & value) [member function]
++    cls.add_method('SetAttribute', 
++                   'void', 
++                   [param('std::string', 'name'), param('ns3::AttributeValue const &', 'value')])
++    return
++
+ def register_Ns3TypeId_methods(root_module, cls):
+     cls.add_binary_comparison_operator('!=')
+     cls.add_binary_comparison_operator('<')
+@@ -10281,6 +10345,98 @@
+                    visibility='protected', is_virtual=True)
+     return
+ 
++def register_Ns3TcpClient_methods(root_module, cls):
++    ## tcp-client.h (module 'applications'): ns3::TcpClient::TcpClient(ns3::TcpClient const & arg0) [copy constructor]
++    cls.add_constructor([param('ns3::TcpClient const &', 'arg0')])
++    ## tcp-client.h (module 'applications'): ns3::TcpClient::TcpClient() [constructor]
++    cls.add_constructor([])
++    ## tcp-client.h (module 'applications'): void ns3::TcpClient::EstablishSession(Session & s) [member function]
++    cls.add_method('EstablishSession', 
++                   'void', 
++                   [param('Session &', 's')])
++    ## tcp-client.h (module 'applications'): static ns3::TypeId ns3::TcpClient::GetTypeId() [member function]
++    cls.add_method('GetTypeId', 
++                   'ns3::TypeId', 
++                   [], 
++                   is_static=True)
++    ## tcp-client.h (module 'applications'): void ns3::TcpClient::DoDispose() [member function]
++    cls.add_method('DoDispose', 
++                   'void', 
++                   [], 
++                   visibility='protected', is_virtual=True)
++    ## tcp-client.h (module 'applications'): void ns3::TcpClient::StartApplication() [member function]
++    cls.add_method('StartApplication', 
++                   'void', 
++                   [], 
++                   visibility='private', is_virtual=True)
++    ## tcp-client.h (module 'applications'): void ns3::TcpClient::StopApplication() [member function]
++    cls.add_method('StopApplication', 
++                   'void', 
++                   [], 
++                   visibility='private', is_virtual=True)
++    return
++
++def register_Ns3TcpServer_methods(root_module, cls):
++    ## tcp-server.h (module 'applications'): ns3::TcpServer::TcpServer(ns3::TcpServer const & arg0) [copy constructor]
++    cls.add_constructor([param('ns3::TcpServer const &', 'arg0')])
++    ## tcp-server.h (module 'applications'): ns3::TcpServer::TcpServer() [constructor]
++    cls.add_constructor([])
++    ## tcp-server.h (module 'applications'): std::list<ns3::Ptr<ns3::Socket>, std::allocator<ns3::Ptr<ns3::Socket> > > ns3::TcpServer::GetAcceptedSockets() const [member function]
++    cls.add_method('GetAcceptedSockets', 
++                   'std::list< ns3::Ptr< ns3::Socket > >', 
++                   [], 
++                   is_const=True)
++    ## tcp-server.h (module 'applications'): ns3::Ptr<ns3::Socket> ns3::TcpServer::GetListeningSocket() const [member function]
++    cls.add_method('GetListeningSocket', 
++                   'ns3::Ptr< ns3::Socket >', 
++                   [], 
++                   is_const=True)
++    ## tcp-server.h (module 'applications'): static ns3::TypeId ns3::TcpServer::GetTypeId() [member function]
++    cls.add_method('GetTypeId', 
++                   'ns3::TypeId', 
++                   [], 
++                   is_static=True)
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::SetAcceptHandler(ConnectionAcceptHandler handler, void * userData) [member function]
++    cls.add_method('SetAcceptHandler', 
++                   'void', 
++                   [param('ConnectionAcceptHandler', 'handler'), param('void *', 'userData')])
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::SetConnectionCloseHandler(ConnectionCloseHandler handler) [member function]
++    cls.add_method('SetConnectionCloseHandler', 
++                   'void', 
++                   [param('ConnectionCloseHandler', 'handler')])
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::SetConnectionErrorHandler(ConnectionCloseHandler handler) [member function]
++    cls.add_method('SetConnectionErrorHandler', 
++                   'void', 
++                   [param('ConnectionCloseHandler', 'handler')])
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::SetDataReceiveHandler(DataReceiveHandler handler) [member function]
++    cls.add_method('SetDataReceiveHandler', 
++                   'void', 
++                   [param('DataReceiveHandler', 'handler')])
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::SetDataSendHandler(DataSendHandler handler) [member function]
++    cls.add_method('SetDataSendHandler', 
++                   'void', 
++                   [param('DataSendHandler', 'handler')])
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::SetFreeResourcesHandler(FreeResourcesHandler handler) [member function]
++    cls.add_method('SetFreeResourcesHandler', 
++                   'void', 
++                   [param('FreeResourcesHandler', 'handler')])
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::DoDispose() [member function]
++    cls.add_method('DoDispose', 
++                   'void', 
++                   [], 
++                   visibility='protected', is_virtual=True)
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::StartApplication() [member function]
++    cls.add_method('StartApplication', 
++                   'void', 
++                   [], 
++                   visibility='private', is_virtual=True)
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::StopApplication() [member function]
++    cls.add_method('StopApplication', 
++                   'void', 
++                   [], 
++                   visibility='private', is_virtual=True)
++    return
++
+ def register_Ns3TimeValue_methods(root_module, cls):
+     ## nstime.h (module 'core'): ns3::TimeValue::TimeValue() [constructor]
+     cls.add_constructor([])
+@@ -10985,6 +11141,10 @@
+ 
+ def register_functions(root_module):
+     module = root_module
++    ## tcp-client.h (module 'applications'): extern void ns3::ClientSetHandlers(int nodeIndex, int applicationIndex, ClientDataReceiveHandler receiveHandler, DataSendHandler sendHandler, ClientFreeResourcesHandler freeHandler, ClientConnectionCloseHandler closeHandler, ConnectionErrorHandler errorHandler, NotifyClientPort notifier) [free function]
++    module.add_function('ClientSetHandlers', 
++                        'void', 
++                        [param('int', 'nodeIndex'), param('int', 'applicationIndex'), param('ClientDataReceiveHandler', 'receiveHandler'), param('DataSendHandler', 'sendHandler'), param('ClientFreeResourcesHandler', 'freeHandler'), param('ClientConnectionCloseHandler', 'closeHandler'), param('ConnectionErrorHandler', 'errorHandler'), param('NotifyClientPort', 'notifier')])
+     register_functions_ns3_FatalImpl(module.get_submodule('FatalImpl'), root_module)
+     register_functions_ns3_Hash(module.get_submodule('Hash'), root_module)
+     register_functions_ns3_addressUtils(module.get_submodule('addressUtils'), root_module)
+Index: src/applications/bindings/modulegen__gcc_LP64.py
+===================================================================
+--- a/src/applications/bindings/modulegen__gcc_LP64.py
++++ b/src/applications/bindings/modulegen__gcc_LP64.py
+@@ -174,6 +174,10 @@
+     module.add_class('Tag', import_from_module='ns.network', parent=root_module['ns3::ObjectBase'])
+     ## tag-buffer.h (module 'network'): ns3::TagBuffer [class]
+     module.add_class('TagBuffer', import_from_module='ns.network')
++    ## tcp-client-helper.h (module 'applications'): ns3::TcpClientHelper [class]
++    module.add_class('TcpClientHelper')
++    ## tcp-server-helper.h (module 'applications'): ns3::TcpServerHelper [class]
++    module.add_class('TcpServerHelper')
+     ## type-id.h (module 'core'): ns3::TypeId [class]
+     module.add_class('TypeId', import_from_module='ns.core')
+     ## type-id.h (module 'core'): ns3::TypeId::AttributeFlag [enumeration]
+@@ -480,6 +484,10 @@
+     module.add_class('SimpleChannel', import_from_module='ns.network', parent=root_module['ns3::Channel'])
+     ## simple-net-device.h (module 'network'): ns3::SimpleNetDevice [class]
+     module.add_class('SimpleNetDevice', import_from_module='ns.network', parent=root_module['ns3::NetDevice'])
++    ## tcp-client.h (module 'applications'): ns3::TcpClient [class]
++    module.add_class('TcpClient', parent=root_module['ns3::Application'])
++    ## tcp-server.h (module 'applications'): ns3::TcpServer [class]
++    module.add_class('TcpServer', parent=root_module['ns3::Application'])
+     ## nstime.h (module 'core'): ns3::TimeValue [class]
+     module.add_class('TimeValue', import_from_module='ns.core', parent=root_module['ns3::AttributeValue'])
+     ## type-id.h (module 'core'): ns3::TypeIdChecker [class]
+@@ -673,6 +681,8 @@
+     register_Ns3SystemWallClockMs_methods(root_module, root_module['ns3::SystemWallClockMs'])
+     register_Ns3Tag_methods(root_module, root_module['ns3::Tag'])
+     register_Ns3TagBuffer_methods(root_module, root_module['ns3::TagBuffer'])
++    register_Ns3TcpClientHelper_methods(root_module, root_module['ns3::TcpClientHelper'])
++    register_Ns3TcpServerHelper_methods(root_module, root_module['ns3::TcpServerHelper'])
+     register_Ns3TypeId_methods(root_module, root_module['ns3::TypeId'])
+     register_Ns3TypeIdAttributeInformation_methods(root_module, root_module['ns3::TypeId::AttributeInformation'])
+     register_Ns3TypeIdTraceSourceInformation_methods(root_module, root_module['ns3::TypeId::TraceSourceInformation'])
+@@ -814,6 +824,8 @@
+     register_Ns3ReceiveListErrorModel_methods(root_module, root_module['ns3::ReceiveListErrorModel'])
+     register_Ns3SimpleChannel_methods(root_module, root_module['ns3::SimpleChannel'])
+     register_Ns3SimpleNetDevice_methods(root_module, root_module['ns3::SimpleNetDevice'])
++    register_Ns3TcpClient_methods(root_module, root_module['ns3::TcpClient'])
++    register_Ns3TcpServer_methods(root_module, root_module['ns3::TcpServer'])
+     register_Ns3TimeValue_methods(root_module, root_module['ns3::TimeValue'])
+     register_Ns3TypeIdChecker_methods(root_module, root_module['ns3::TypeIdChecker'])
+     register_Ns3TypeIdValue_methods(root_module, root_module['ns3::TypeIdValue'])
+@@ -3755,6 +3767,58 @@
+                    [param('uint8_t', 'v')])
+     return
+ 
++def register_Ns3TcpClientHelper_methods(root_module, cls):
++    ## tcp-client-helper.h (module 'applications'): ns3::TcpClientHelper::TcpClientHelper(ns3::TcpClientHelper const & arg0) [copy constructor]
++    cls.add_constructor([param('ns3::TcpClientHelper const &', 'arg0')])
++    ## tcp-client-helper.h (module 'applications'): ns3::TcpClientHelper::TcpClientHelper(std::string protocol) [constructor]
++    cls.add_constructor([param('std::string', 'protocol')])
++    ## tcp-client-helper.h (module 'applications'): ns3::ApplicationContainer ns3::TcpClientHelper::Install(ns3::NodeContainer c) const [member function]
++    cls.add_method('Install', 
++                   'ns3::ApplicationContainer', 
++                   [param('ns3::NodeContainer', 'c')], 
++                   is_const=True)
++    ## tcp-client-helper.h (module 'applications'): ns3::ApplicationContainer ns3::TcpClientHelper::Install(ns3::Ptr<ns3::Node> node) const [member function]
++    cls.add_method('Install', 
++                   'ns3::ApplicationContainer', 
++                   [param('ns3::Ptr< ns3::Node >', 'node')], 
++                   is_const=True)
++    ## tcp-client-helper.h (module 'applications'): ns3::ApplicationContainer ns3::TcpClientHelper::Install(std::string nodeName) const [member function]
++    cls.add_method('Install', 
++                   'ns3::ApplicationContainer', 
++                   [param('std::string', 'nodeName')], 
++                   is_const=True)
++    ## tcp-client-helper.h (module 'applications'): void ns3::TcpClientHelper::SetAttribute(std::string name, ns3::AttributeValue const & value) [member function]
++    cls.add_method('SetAttribute', 
++                   'void', 
++                   [param('std::string', 'name'), param('ns3::AttributeValue const &', 'value')])
++    return
++
++def register_Ns3TcpServerHelper_methods(root_module, cls):
++    ## tcp-server-helper.h (module 'applications'): ns3::TcpServerHelper::TcpServerHelper(ns3::TcpServerHelper const & arg0) [copy constructor]
++    cls.add_constructor([param('ns3::TcpServerHelper const &', 'arg0')])
++    ## tcp-server-helper.h (module 'applications'): ns3::TcpServerHelper::TcpServerHelper(std::string protocol, ns3::Address address) [constructor]
++    cls.add_constructor([param('std::string', 'protocol'), param('ns3::Address', 'address')])
++    ## tcp-server-helper.h (module 'applications'): ns3::ApplicationContainer ns3::TcpServerHelper::Install(ns3::NodeContainer c) const [member function]
++    cls.add_method('Install', 
++                   'ns3::ApplicationContainer', 
++                   [param('ns3::NodeContainer', 'c')], 
++                   is_const=True)
++    ## tcp-server-helper.h (module 'applications'): ns3::ApplicationContainer ns3::TcpServerHelper::Install(ns3::Ptr<ns3::Node> node) const [member function]
++    cls.add_method('Install', 
++                   'ns3::ApplicationContainer', 
++                   [param('ns3::Ptr< ns3::Node >', 'node')], 
++                   is_const=True)
++    ## tcp-server-helper.h (module 'applications'): ns3::ApplicationContainer ns3::TcpServerHelper::Install(std::string nodeName) const [member function]
++    cls.add_method('Install', 
++                   'ns3::ApplicationContainer', 
++                   [param('std::string', 'nodeName')], 
++                   is_const=True)
++    ## tcp-server-helper.h (module 'applications'): void ns3::TcpServerHelper::SetAttribute(std::string name, ns3::AttributeValue const & value) [member function]
++    cls.add_method('SetAttribute', 
++                   'void', 
++                   [param('std::string', 'name'), param('ns3::AttributeValue const &', 'value')])
++    return
++
+ def register_Ns3TypeId_methods(root_module, cls):
+     cls.add_binary_comparison_operator('!=')
+     cls.add_binary_comparison_operator('<')
+@@ -10281,6 +10345,98 @@
+                    visibility='protected', is_virtual=True)
+     return
+ 
++def register_Ns3TcpClient_methods(root_module, cls):
++    ## tcp-client.h (module 'applications'): ns3::TcpClient::TcpClient(ns3::TcpClient const & arg0) [copy constructor]
++    cls.add_constructor([param('ns3::TcpClient const &', 'arg0')])
++    ## tcp-client.h (module 'applications'): ns3::TcpClient::TcpClient() [constructor]
++    cls.add_constructor([])
++    ## tcp-client.h (module 'applications'): void ns3::TcpClient::EstablishSession(Session & s) [member function]
++    cls.add_method('EstablishSession', 
++                   'void', 
++                   [param('Session &', 's')])
++    ## tcp-client.h (module 'applications'): static ns3::TypeId ns3::TcpClient::GetTypeId() [member function]
++    cls.add_method('GetTypeId', 
++                   'ns3::TypeId', 
++                   [], 
++                   is_static=True)
++    ## tcp-client.h (module 'applications'): void ns3::TcpClient::DoDispose() [member function]
++    cls.add_method('DoDispose', 
++                   'void', 
++                   [], 
++                   visibility='protected', is_virtual=True)
++    ## tcp-client.h (module 'applications'): void ns3::TcpClient::StartApplication() [member function]
++    cls.add_method('StartApplication', 
++                   'void', 
++                   [], 
++                   visibility='private', is_virtual=True)
++    ## tcp-client.h (module 'applications'): void ns3::TcpClient::StopApplication() [member function]
++    cls.add_method('StopApplication', 
++                   'void', 
++                   [], 
++                   visibility='private', is_virtual=True)
++    return
++
++def register_Ns3TcpServer_methods(root_module, cls):
++    ## tcp-server.h (module 'applications'): ns3::TcpServer::TcpServer(ns3::TcpServer const & arg0) [copy constructor]
++    cls.add_constructor([param('ns3::TcpServer const &', 'arg0')])
++    ## tcp-server.h (module 'applications'): ns3::TcpServer::TcpServer() [constructor]
++    cls.add_constructor([])
++    ## tcp-server.h (module 'applications'): std::list<ns3::Ptr<ns3::Socket>, std::allocator<ns3::Ptr<ns3::Socket> > > ns3::TcpServer::GetAcceptedSockets() const [member function]
++    cls.add_method('GetAcceptedSockets', 
++                   'std::list< ns3::Ptr< ns3::Socket > >', 
++                   [], 
++                   is_const=True)
++    ## tcp-server.h (module 'applications'): ns3::Ptr<ns3::Socket> ns3::TcpServer::GetListeningSocket() const [member function]
++    cls.add_method('GetListeningSocket', 
++                   'ns3::Ptr< ns3::Socket >', 
++                   [], 
++                   is_const=True)
++    ## tcp-server.h (module 'applications'): static ns3::TypeId ns3::TcpServer::GetTypeId() [member function]
++    cls.add_method('GetTypeId', 
++                   'ns3::TypeId', 
++                   [], 
++                   is_static=True)
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::SetAcceptHandler(ConnectionAcceptHandler handler, void * userData) [member function]
++    cls.add_method('SetAcceptHandler', 
++                   'void', 
++                   [param('ConnectionAcceptHandler', 'handler'), param('void *', 'userData')])
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::SetConnectionCloseHandler(ConnectionCloseHandler handler) [member function]
++    cls.add_method('SetConnectionCloseHandler', 
++                   'void', 
++                   [param('ConnectionCloseHandler', 'handler')])
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::SetConnectionErrorHandler(ConnectionCloseHandler handler) [member function]
++    cls.add_method('SetConnectionErrorHandler', 
++                   'void', 
++                   [param('ConnectionCloseHandler', 'handler')])
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::SetDataReceiveHandler(DataReceiveHandler handler) [member function]
++    cls.add_method('SetDataReceiveHandler', 
++                   'void', 
++                   [param('DataReceiveHandler', 'handler')])
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::SetDataSendHandler(DataSendHandler handler) [member function]
++    cls.add_method('SetDataSendHandler', 
++                   'void', 
++                   [param('DataSendHandler', 'handler')])
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::SetFreeResourcesHandler(FreeResourcesHandler handler) [member function]
++    cls.add_method('SetFreeResourcesHandler', 
++                   'void', 
++                   [param('FreeResourcesHandler', 'handler')])
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::DoDispose() [member function]
++    cls.add_method('DoDispose', 
++                   'void', 
++                   [], 
++                   visibility='protected', is_virtual=True)
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::StartApplication() [member function]
++    cls.add_method('StartApplication', 
++                   'void', 
++                   [], 
++                   visibility='private', is_virtual=True)
++    ## tcp-server.h (module 'applications'): void ns3::TcpServer::StopApplication() [member function]
++    cls.add_method('StopApplication', 
++                   'void', 
++                   [], 
++                   visibility='private', is_virtual=True)
++    return
++
+ def register_Ns3TimeValue_methods(root_module, cls):
+     ## nstime.h (module 'core'): ns3::TimeValue::TimeValue() [constructor]
+     cls.add_constructor([])
+@@ -10985,6 +11141,10 @@
+ 
+ def register_functions(root_module):
+     module = root_module
++    ## tcp-client.h (module 'applications'): extern void ns3::ClientSetHandlers(int nodeIndex, int applicationIndex, ClientDataReceiveHandler receiveHandler, DataSendHandler sendHandler, ClientFreeResourcesHandler freeHandler, ClientConnectionCloseHandler closeHandler, ConnectionErrorHandler errorHandler, NotifyClientPort notifier) [free function]
++    module.add_function('ClientSetHandlers', 
++                        'void', 
++                        [param('int', 'nodeIndex'), param('int', 'applicationIndex'), param('ClientDataReceiveHandler', 'receiveHandler'), param('DataSendHandler', 'sendHandler'), param('ClientFreeResourcesHandler', 'freeHandler'), param('ClientConnectionCloseHandler', 'closeHandler'), param('ConnectionErrorHandler', 'errorHandler'), param('NotifyClientPort', 'notifier')])
+     register_functions_ns3_FatalImpl(module.get_submodule('FatalImpl'), root_module)
+     register_functions_ns3_Hash(module.get_submodule('Hash'), root_module)
+     register_functions_ns3_addressUtils(module.get_submodule('addressUtils'), root_module)
+Index: src/applications/helper/tcp-client-helper.cc
+===================================================================
+new file mode 100644
+--- /dev/null
++++ b/src/applications/helper/tcp-client-helper.cc
+@@ -0,0 +1,76 @@
++/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
++/*
++ * Copyright 2014 Sudarshan S, Aditya Kamath, Bhargav Reddy
++ *                 (Students at IIT Hyderabad)
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation;
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ * Author:  Sudarshan S, Aditya Kamath, Bhargav Reddy
++ */
++
++#include "tcp-client-helper.h"
++#include "ns3/inet-socket-address.h"
++#include "ns3/packet-socket-address.h"
++#include "ns3/string.h"
++#include "ns3/names.h"
++
++namespace ns3 {
++
++TcpClientHelper::TcpClientHelper (std::string protocol)
++{
++  m_factory.SetTypeId ("ns3::TcpClient");
++  m_factory.Set ("Protocol", StringValue (protocol));
++}
++
++void
++TcpClientHelper::SetAttribute (std::string name, const AttributeValue &value)
++{
++  m_factory.Set (name, value);
++}
++
++ApplicationContainer
++TcpClientHelper::Install (Ptr<Node> node) const
++{
++  return ApplicationContainer (InstallPriv (node));
++}
++
++ApplicationContainer
++TcpClientHelper::Install (std::string nodeName) const
++{
++  Ptr<Node> node = Names::Find<Node> (nodeName);
++  return ApplicationContainer (InstallPriv (node));
++}
++
++ApplicationContainer
++TcpClientHelper::Install (NodeContainer c) const
++{
++  ApplicationContainer apps;
++  for (NodeContainer::Iterator i = c.Begin (); i != c.End (); ++i)
++    {
++      apps.Add (InstallPriv (*i));
++    }
++
++  return apps;
++}
++
++Ptr<Application>
++TcpClientHelper::InstallPriv (Ptr<Node> node) const
++{
++  Ptr<Application> app = m_factory.Create<Application> ();
++  node->AddApplication (app);
++
++  return app;
++}
++
++} // namespace ns3
+Index: src/applications/helper/tcp-client-helper.h
+===================================================================
+new file mode 100644
+--- /dev/null
++++ b/src/applications/helper/tcp-client-helper.h
+@@ -0,0 +1,108 @@
++/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
++/*
++ * Copyright 2014 Sudarshan S, Aditya Kamath, Bhargav Reddy
++ *                 (Students at IIT Hyderabad)
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation;
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ * Author:  Sudarshan S, Aditya Kamath, Bhargav Reddy
++ */
++
++#ifndef TCP_CLIENT_HELPER_H
++#define TCP_CLIENT_HELPER_H
++
++#include <stdint.h>
++#include <string>
++#include "ns3/object-factory.h"
++#include "ns3/address.h"
++#include "ns3/attribute.h"
++#include "ns3/net-device.h"
++#include "ns3/node-container.h"
++#include "ns3/application-container.h"
++
++namespace ns3 {
++
++/**
++ * \ingroup tcpclient
++ * \brief A helper to make it easier to instantiate an ns3::TcpClient
++ * on a set of nodes.
++ */
++class TcpClientHelper
++{
++public:
++  /**
++   * Create an TcpClientHelper to make it easier to work with TcpClients
++   *
++   * \param protocol the name of the protocol to use to send traffic
++   *        by the applications. This string identifies the socket
++   *        factory type used to create sockets for the applications.
++   *        A typical value would be ns3::UdpSocketFactory.
++   * \param address the address of the remote node to send traffic
++   *        to.
++   */
++  TcpClientHelper (std::string protocol);
++
++  /**
++   * Helper function used to set the underlying application attributes, 
++   * _not_ the socket attributes.
++   *
++   * \param name the name of the application attribute to set
++   * \param value the value of the application attribute to set
++   */
++  void SetAttribute (std::string name, const AttributeValue &value);
++
++  /**
++   * Install an ns3::TcpClient on each node of the input container
++   * configured with all the attributes set with SetAttribute.
++   *
++   * \param c NodeContainer of the set of nodes on which an TcpClient
++   * will be installed.
++   * \returns Container of Ptr to the applications installed.
++   */
++  ApplicationContainer Install (NodeContainer c) const;
++
++  /**
++   * Install an ns3::TcpClient on the node configured with all the
++   * attributes set with SetAttribute.
++   *
++   * \param node The node on which an TcpClient will be installed.
++   * \returns Container of Ptr to the applications installed.
++   */
++  ApplicationContainer Install (Ptr<Node> node) const;
++
++  /**
++   * Install an ns3::TcpClient on the node configured with all the
++   * attributes set with SetAttribute.
++   *
++   * \param nodeName The node on which an TcpClient will be installed.
++   * \returns Container of Ptr to the applications installed.
++   */
++  ApplicationContainer Install (std::string nodeName) const;
++
++private:
++  /**
++   * Install an ns3::TcpClient on the node configured with all the
++   * attributes set with SetAttribute.
++   *
++   * \param node The node on which an TcpClient will be installed.
++   * \returns Ptr to the application installed.
++   */
++  Ptr<Application> InstallPriv (Ptr<Node> node) const;
++
++  ObjectFactory m_factory; //!< Object factory.
++};
++
++} // namespace ns3
++
++#endif /* TCP_CLIENT_HELPER_H */
+\ No newline at end of file
+Index: src/applications/helper/tcp-server-helper.cc
+===================================================================
+new file mode 100644
+--- /dev/null
++++ b/src/applications/helper/tcp-server-helper.cc
+@@ -0,0 +1,76 @@
++/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
++/*
++ * Copyright 2014 Sudarshan S, Aditya Kamath, Bhargav Reddy
++ *                 (Students at IIT Hyderabad)
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation;
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ * Author:  Sudarshan S, Aditya Kamath, Bhargav Reddy
++ */
++
++#include "tcp-server-helper.h"
++#include "ns3/string.h"
++#include "ns3/inet-socket-address.h"
++#include "ns3/names.h"
++
++namespace ns3 {
++
++TcpServerHelper::TcpServerHelper (std::string protocol, Address address)
++{
++  m_factory.SetTypeId ("ns3::TcpServer");
++  m_factory.Set ("Protocol", StringValue (protocol));
++  m_factory.Set ("Local", AddressValue (address));
++}
++
++void 
++TcpServerHelper::SetAttribute (std::string name, const AttributeValue &value)
++{
++  m_factory.Set (name, value);
++}
++
++ApplicationContainer
++TcpServerHelper::Install (Ptr<Node> node) const
++{
++  return ApplicationContainer (InstallPriv (node));
++}
++
++ApplicationContainer
++TcpServerHelper::Install (std::string nodeName) const
++{
++  Ptr<Node> node = Names::Find<Node> (nodeName);
++  return ApplicationContainer (InstallPriv (node));
++}
++
++ApplicationContainer
++TcpServerHelper::Install (NodeContainer c) const
++{
++  ApplicationContainer apps;
++  for (NodeContainer::Iterator i = c.Begin (); i != c.End (); ++i)
++    {
++      apps.Add (InstallPriv (*i));
++    }
++
++  return apps;
++}
++
++Ptr<Application>
++TcpServerHelper::InstallPriv (Ptr<Node> node) const
++{
++  Ptr<Application> app = m_factory.Create<Application> ();
++  node->AddApplication (app);
++
++  return app;
++}
++
++} // namespace ns3
+Index: src/applications/helper/tcp-server-helper.h
+===================================================================
+new file mode 100644
+--- /dev/null
++++ b/src/applications/helper/tcp-server-helper.h
+@@ -0,0 +1,102 @@
++/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
++/*
++ * Copyright 2014 Sudarshan S, Aditya Kamath, Bhargav Reddy
++ *                 (Students at IIT Hyderabad)
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation;
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ * Author:  Sudarshan S, Aditya Kamath, Bhargav Reddy
++ */
++
++#ifndef TCP_SERVER_HELPER_H
++#define TCP_SERVER_HELPER_H
++
++#include "ns3/object-factory.h"
++#include "ns3/ipv4-address.h"
++#include "ns3/node-container.h"
++#include "ns3/application-container.h"
++
++namespace ns3 {
++
++/**
++ * \ingroup tcpserver
++ * \brief A helper to make it easier to instantiate an ns3::TcpServer
++ * on a set of nodes.
++ */
++class TcpServerHelper
++{
++public:
++  /**
++   * Create a TcpServerHelper to make it easier to work with TcpServers
++   *
++   * \param protocol the name of the protocol to use to receive traffic
++   *        This string identifies the socket factory type used to create
++   *        sockets for the applications.  A typical value would be 
++   *        ns3::TcpSocketFactory.
++   * \param address the address of the sink,
++   *
++   */
++  TcpServerHelper (std::string protocol, Address address);
++
++  /**
++   * Helper function used to set the underlying application attributes.
++   *
++   * \param name the name of the application attribute to set
++   * \param value the value of the application attribute to set
++   */
++  void SetAttribute (std::string name, const AttributeValue &value);
++
++  /**
++   * Install an ns3::TcpServer on each node of the input container
++   * configured with all the attributes set with SetAttribute.
++   *
++   * \param c NodeContainer of the set of nodes on which a TcpServer
++   * will be installed.
++   * \returns Container of Ptr to the applications installed.
++   */
++  ApplicationContainer Install (NodeContainer c) const;
++
++  /**
++   * Install an ns3::TcpServer on each node of the input container
++   * configured with all the attributes set with SetAttribute.
++   *
++   * \param node The node on which a TcpServer will be installed.
++   * \returns Container of Ptr to the applications installed.
++   */
++  ApplicationContainer Install (Ptr<Node> node) const;
++
++  /**
++   * Install an ns3::TcpServer on each node of the input container
++   * configured with all the attributes set with SetAttribute.
++   *
++   * \param nodeName The name of the node on which a TcpServer will be installed.
++   * \returns Container of Ptr to the applications installed.
++   */
++  ApplicationContainer Install (std::string nodeName) const;
++
++private:
++  /**
++   * Install an ns3::TcpServer on the node configured with all the
++   * attributes set with SetAttribute.
++   *
++   * \param node The node on which an TcpServer will be installed.
++   * \returns Ptr to the application installed.
++   */
++  Ptr<Application> InstallPriv (Ptr<Node> node) const;
++  ObjectFactory m_factory; //!< Object factory.
++};
++
++} // namespace ns3
++
++#endif /* TCP_SERVER_HELPER_H */
+\ No newline at end of file
+Index: src/applications/model/python-model.h
+===================================================================
+new file mode 100644
+--- /dev/null
++++ b/src/applications/model/python-model.h
+@@ -0,0 +1,49 @@
++/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
++/*
++ * Copyright 2014 Sudarshan S, Aditya Kamath, Bhargav Reddy
++ *                 (Students at IIT Hyderabad)
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation;
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ * Author:  Sudarshan S, Aditya Kamath, Bhargav Reddy
++ */
++
++#ifndef PYTHON_MODEL_H
++#define PYTHON_MODEL_H
++
++struct Bytes{
++    unsigned char* data;
++    unsigned int length;
++};
++
++struct Session{
++    const char* remoteIp;
++    unsigned short port;
++    void* userData;
++    void* remoteIpBlob;
++    bool currentlySending;
++};
++
++typedef double (*ClientConnectionCloseHandler) (void* user_data);
++typedef void (*ClientFreeResourcesHandler) (Session* user_data);
++typedef void* (*ConnectionAcceptHandler)(void* user_data, unsigned char byte1, unsigned char byte2, unsigned char byte3, unsigned char byte4, unsigned short port);
++typedef double (*DataReceiveHandler) (void* user_data, unsigned char* data, unsigned short length);
++typedef void (*ClientDataReceiveHandler) (void* user_data, unsigned char* data, unsigned short length);
++typedef Bytes (*DataSendHandler) (void* user_data, unsigned int length);
++typedef void (*ConnectionCloseHandler) (void* user_data);
++typedef void (*ConnectionErrorHandler) (void* user_data);
++typedef void (*FreeResourcesHandler) (void* user_data);
++typedef void (*NotifyClientPort) (void* user_data, unsigned int port);
++
++#endif /* PYTHON_MODEL_H */
+Index: src/applications/model/tcp-client.cc
+===================================================================
+new file mode 100644
+--- /dev/null
++++ b/src/applications/model/tcp-client.cc
+@@ -0,0 +1,234 @@
++/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
++/*
++ * Copyright 2014 Sudarshan S, Aditya Kamath, Bhargav Reddy
++ *                 (Students at IIT Hyderabad)
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation;
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ * Author:  Sudarshan S, Aditya Kamath, Bhargav Reddy
++ */
++
++#include "ns3/log.h"
++#include "ns3/address.h"
++#include "ns3/node.h"
++#include "ns3/nstime.h"
++#include "ns3/socket.h"
++#include "ns3/simulator.h"
++#include "ns3/socket-factory.h"
++#include "ns3/packet.h"
++#include "ns3/uinteger.h"
++#include "ns3/trace-source-accessor.h"
++#include "ns3/tcp-socket-factory.h"
++#include "tcp-client.h"
++#include "ns3/node-list.h"
++
++NS_LOG_COMPONENT_DEFINE ("TcpClient");
++
++namespace ns3 {
++
++NS_OBJECT_ENSURE_REGISTERED (TcpClient)
++  ;
++
++TypeId
++TcpClient::GetTypeId (void)
++{
++  static TypeId tid = TypeId ("ns3::TcpClient")
++    .SetParent<Application> ()
++    .AddConstructor<TcpClient> ()
++    .AddAttribute ("SendSize", "The amount of data to send each time.",
++                   UintegerValue (512),
++                   MakeUintegerAccessor (&TcpClient::m_sendSize),
++                   MakeUintegerChecker<uint32_t> (1))
++    .AddAttribute ("Protocol", "The type of protocol to use.",
++                   TypeIdValue (TcpSocketFactory::GetTypeId ()),
++                   MakeTypeIdAccessor (&TcpClient::m_tid),
++                   MakeTypeIdChecker ())
++    ;
++  return tid;
++}
++
++
++TcpClient::TcpClient ()
++{
++  NS_LOG_FUNCTION (this);
++}
++
++TcpClient::~TcpClient ()
++{
++  NS_LOG_FUNCTION (this);
++}
++
++void
++TcpClient::DoDispose (void)
++{
++  NS_LOG_FUNCTION (this);
++  // chain up
++  Application::DoDispose ();
++}
++
++// Application Methods
++void TcpClient::StartApplication (void) // Called at time specified by Start
++{
++  NS_LOG_FUNCTION (this);
++}
++
++void TcpClient::HandlePeerClose (Ptr<Socket> socket)
++{
++  double time = this->connectionCloseHandler(socketToSession[PeekPointer(socket)].userData);
++  std::cout<<"Client will send more data in "<<time<<std::endl;
++  if(time<0)
++    {
++      //free resources
++      this->freeResourcesHandler(&(socketToSession[PeekPointer(socket)]));
++    }
++    else
++    {
++      //initiate next connection
++      Session s = socketToSession[PeekPointer(socket)];
++      s.currentlySending=true;
++      socketToSession.erase(PeekPointer(socket));
++      Simulator::Schedule(Seconds(time), &TcpClient::EstablishSession, this, s);
++    }
++  NS_LOG_FUNCTION (this << socket);
++}
++
++void TcpClient::HandlePeerError (Ptr<Socket> socket)
++{
++  this->connectionErrorHandler(socketToSession[PeekPointer(socket)].userData);
++  NS_LOG_FUNCTION (this << socket);
++}
++
++void TcpClient::EstablishSession(Session& s)
++{
++    // Create the socket
++    Ptr<Socket> m_socket = Socket::CreateSocket (GetNode (), m_tid);
++    socketToSession[PeekPointer(m_socket)]=s;
++
++    // Fatal error if socket type is not NS3_SOCK_STREAM or NS3_SOCK_SEQPACKET
++    if (m_socket->GetSocketType () != Socket::NS3_SOCK_STREAM &&
++        m_socket->GetSocketType () != Socket::NS3_SOCK_SEQPACKET)
++      {
++        NS_FATAL_ERROR ("Using TcpClient with an incompatible socket type. "
++                        "TcpClient requires SOCK_STREAM or SOCK_SEQPACKET. "
++                        "In other words, use TCP instead of UDP.");
++      }
++    InetSocketAddress remoteAddress(s.remoteIp, s.port);
++    m_socket->Bind ();
++    m_socket->Connect (remoteAddress);
++    m_socket->SetConnectCallback (
++      MakeCallback (&TcpClient::ConnectionSucceeded, this),
++      MakeCallback (&TcpClient::ConnectionFailed, this));
++    m_socket->SetRecvCallback (MakeCallback (&TcpClient::HandleRead, this));
++    m_socket->SetSendCallback (
++      MakeCallback (&TcpClient::DataSend, this));
++    m_socket->SetCloseCallbacks (
++      MakeCallback (&TcpClient::HandlePeerClose, this),
++      MakeCallback (&TcpClient::HandlePeerError, this));
++    NS_LOG_FUNCTION("Establised the session");
++}
++
++void TcpClient::StopApplication (void) // Called at time specified by Stop
++{
++  NS_LOG_FUNCTION (this);
++}
++
++
++// Private helpers
++
++void TcpClient::ConnectionSucceeded (Ptr<Socket> socket)
++{
++  NS_LOG_FUNCTION (this << socket);
++  NS_LOG_LOGIC ("TcpClient Connection succeeded");
++  Address address;
++  socket->GetSockName(address);
++  InetSocketAddress isa=InetSocketAddress::ConvertFrom(address);
++  this->notifier(socketToSession[PeekPointer(socket)].userData, isa.GetPort());
++  DataSend (socket, socket->GetTxAvailable());
++}
++
++void TcpClient::ConnectionFailed (Ptr<Socket> socket)
++{
++  NS_LOG_FUNCTION (this << socket);
++  NS_LOG_LOGIC ("TcpClient, Connection Failed");
++}
++
++void TcpClient::DataSend (Ptr<Socket> m_socket, uint32_t length)
++{
++  if(socketToSession[PeekPointer(m_socket)].currentlySending)
++    {
++      NS_LOG_FUNCTION (this);
++      Bytes data = this->dataSendHandler(socketToSession[PeekPointer(m_socket)].userData, length);
++      m_socket->Send(data.data,data.length,0);
++      // Check if time to close (all sent)
++      if (data.length<length)
++        {
++          m_socket->ShutdownSend();
++          socketToSession[PeekPointer(m_socket)].currentlySending=false;
++        }
++     }
++}
++
++void TcpClient::HandleRead (Ptr<Socket> socket)
++{
++  NS_LOG_FUNCTION (this << socket);
++  Ptr<Packet> packet;
++  Address from;
++  while ((packet = socket->RecvFrom (from)))
++    {
++      if (packet->GetSize () == 0)
++        { //EOF
++          break;
++        }
++      if (InetSocketAddress::IsMatchingType (from))
++        {
++          NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds ()
++                       << "s packet sink received "
++                       <<  packet->GetSize () << " bytes from "
++                       << InetSocketAddress::ConvertFrom(from).GetIpv4 ()
++                       << " port " << InetSocketAddress::ConvertFrom (from).GetPort ());
++                       //<< " total Rx " << m_totalRx << " bytes");
++
++          this->dataReceiveHandler(socketToSession[PeekPointer(socket)].userData, (unsigned char*)packet->PeekData(), packet->GetSize());
++        }
++    }
++}
++
++
++
++void ClientSetHandlers(int nodeIndex, int applicationIndex, ClientDataReceiveHandler receiveHandler, DataSendHandler sendHandler, ClientFreeResourcesHandler freeHandler, ClientConnectionCloseHandler closeHandler, ConnectionErrorHandler errorHandler, NotifyClientPort notifier){
++  Ptr<Node> node = NodeList::GetNode(nodeIndex);
++  Ptr<Application> app = node->GetApplication(applicationIndex);
++  TcpClient* client = static_cast<TcpClient*>(PeekPointer(app));
++  client->dataSendHandler = sendHandler;
++  client->dataReceiveHandler = receiveHandler;
++  client->freeResourcesHandler = freeHandler;
++  client->connectionCloseHandler = closeHandler;
++  client->connectionErrorHandler = errorHandler;
++  client->notifier = notifier;
++}
++} // Namespace ns3
++
++using namespace ns3;
++void ClientEstablishSession(int nodeIndex, int applicationIndex, double time, const char* remoteIp, unsigned short port, void* userData, void* remoteIpBlob){
++  Ptr<Node> node = NodeList::GetNode(nodeIndex);
++  Ptr<Application> app = node->GetApplication(applicationIndex);
++  Ptr<TcpClient> client = Ptr<TcpClient>(static_cast<TcpClient*>(PeekPointer(app)));
++  Session s;
++  s.port=port;
++  s.remoteIp=remoteIp;
++  s.userData=userData;
++  s.currentlySending=true;
++  s.remoteIpBlob=remoteIpBlob;
++  Simulator::Schedule(Seconds(time), &TcpClient::EstablishSession, client, s);
++}
+Index: src/applications/model/tcp-client.h
+===================================================================
+new file mode 100644
+--- /dev/null
++++ b/src/applications/model/tcp-client.h
+@@ -0,0 +1,149 @@
++/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
++/*
++ * Copyright 2014 Sudarshan S, Aditya Kamath, Bhargav Reddy
++ *                 (Students at IIT Hyderabad)
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation;
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ * Author:  Sudarshan S, Aditya Kamath, Bhargav Reddy
++ */
++
++#ifndef TCP_CLIENT_H
++#define TCP_CLIENT_H
++
++#include "ns3/address.h"
++#include "ns3/application.h"
++#include "ns3/event-id.h"
++#include "ns3/ptr.h"
++#include "ns3/traced-callback.h"
++#include "ns3/python-model.h"
++#include "ns3/double.h"
++
++#include <map>
++
++namespace ns3 {
++
++class Address;
++class Socket;
++
++/**
++ * \ingroup applications
++ * \defgroup tcpclient tcpclient
++ *
++ * This is a TCP traffic generator that is 
++ * based on callbacks. It allows implementing
++ * the client in Python, which callbacks into
++ * this code. We provide a example python
++ * module which implements a simple client.
++ *
++ */
++
++/**
++ * \ingroup tcpclient
++ *
++ * \brief Send traffic as provided by the Python application
++ *
++ * This is a TCP traffic generator that is 
++ * based on callbacks. It allows implementing
++ * the client in Python, which callbacks into
++ * this code. We provide a example python
++ * module which implements a simple client.
++ *
++ */
++class TcpClient : public Application
++{
++public:
++  /**
++   * \brief Get the type ID.
++   * \return the object TypeId
++   */
++  static TypeId GetTypeId (void);
++
++  TcpClient ();
++
++  virtual ~TcpClient ();
++
++  /**
++   * \brief Get the socket this application is attached to.
++   * \return pointer to associated socket
++   */
++  void EstablishSession(Session& s);
++  
++protected:
++  virtual void DoDispose (void);
++private:
++  // inherited from Application base class.
++  virtual void StartApplication (void);    // Called at time specified by Start
++  virtual void StopApplication (void);     // Called at time specified by Stop
++
++  /**
++   * \brief Send data until the L4 transmission buffer is full.
++   */
++  uint32_t        m_sendSize;     //!< Size of data to send each time
++  TypeId          m_tid;          //!< The type of protocol to use.
++
++  /// Traced Callback: sent packets
++  TracedCallback<Ptr<const Packet> > m_txTrace;
++
++  friend void ClientSetHandlers(int nodeIndex, int applicationIndex, ClientDataReceiveHandler receiveHandler, DataSendHandler sendHandler, ClientFreeResourcesHandler freeHandler, ClientConnectionCloseHandler closeHandler, ConnectionErrorHandler errorHandler, NotifyClientPort notifier);
++
++private:
++  /**
++   * \brief Connection Succeeded (called by Socket through a callback)
++   * \param socket the connected socket
++   */
++  void ConnectionSucceeded (Ptr<Socket> socket);
++  /**
++   * \brief Connection Failed (called by Socket through a callback)
++   * \param socket the connected socket
++   */
++  void ConnectionFailed (Ptr<Socket> socket);
++  /**
++   * \brief Send more data as soon as some has been transmitted.
++   */
++  void DataSend (Ptr<Socket>, uint32_t); // for socket's SetSendCallback
++
++  DataSendHandler dataSendHandler;
++  ClientDataReceiveHandler dataReceiveHandler;
++  ClientFreeResourcesHandler freeResourcesHandler;
++
++  /**
++   * \brief Handle an connection close
++   * \param socket the connected socket
++   */
++  void HandlePeerClose (Ptr<Socket> socket);
++  ClientConnectionCloseHandler connectionCloseHandler;
++
++  /**
++   * \brief Handle an connection error
++   * \param socket the connected socket
++   */
++  void HandlePeerError (Ptr<Socket> socket);
++  ConnectionErrorHandler connectionErrorHandler;
++
++  /**
++   * \brief Handle Read
++   * \param socket the connected socket
++   */
++  void HandleRead (Ptr<Socket> socket);
++  NotifyClientPort notifier;
++  std::map<Socket*, Session> socketToSession;
++};
++
++void ClientSetHandlers(int nodeIndex, int applicationIndex, ClientDataReceiveHandler receiveHandler, DataSendHandler sendHandler, ClientFreeResourcesHandler freeHandler, ClientConnectionCloseHandler closeHandler, ConnectionErrorHandler errorHandler, NotifyClientPort notifier);
++} // namespace ns3
++
++void ClientEstablishSession(int nodeIndex, int applicationIndex, double time, const char* remoteIp, unsigned short port, void* userData, void* remoteIpBlob);
++
++#endif /* TCP_CLIENT_H */
+Index: src/applications/model/tcp-server.cc
+===================================================================
+new file mode 100644
+--- /dev/null
++++ b/src/applications/model/tcp-server.cc
+@@ -0,0 +1,276 @@
++/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
++/*
++ * Copyright 2014 Sudarshan S, Aditya Kamath, Bhargav Reddy
++ *                 (Students at IIT Hyderabad)
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation;
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ * Author:  Sudarshan S, Aditya Kamath, Bhargav Reddy
++ */
++
++#include "ns3/address.h"
++#include "ns3/address-utils.h"
++#include "ns3/log.h"
++#include "ns3/inet-socket-address.h"
++#include "ns3/inet6-socket-address.h"
++#include "ns3/node.h"
++#include "ns3/socket.h"
++#include "ns3/udp-socket.h"
++#include "ns3/simulator.h"
++#include "ns3/socket-factory.h"
++#include "ns3/packet.h"
++#include "ns3/trace-source-accessor.h"
++#include "ns3/udp-socket-factory.h"
++#include "tcp-server.h"
++
++#include "ns3/node-list.h"
++
++namespace ns3 {
++
++NS_LOG_COMPONENT_DEFINE ("TcpServer")
++  ;
++NS_OBJECT_ENSURE_REGISTERED (TcpServer)
++  ;
++
++TypeId 
++TcpServer::GetTypeId (void)
++{
++  static TypeId tid = TypeId ("ns3::TcpServer")
++    .SetParent<Application> ()
++	.AddConstructor<TcpServer> ()
++    .AddAttribute ("Local", "The Address on which to Bind the rx socket.",
++                   AddressValue (),
++				   MakeAddressAccessor (&TcpServer::m_local),
++                   MakeAddressChecker ())
++    .AddAttribute ("Protocol", "The type id of the protocol to use for the rx socket.",
++                   TypeIdValue (UdpSocketFactory::GetTypeId ()),
++				   MakeTypeIdAccessor (&TcpServer::m_tid),
++                   MakeTypeIdChecker ())
++    .AddTraceSource ("Rx", "A packet has been received",
++					 MakeTraceSourceAccessor (&TcpServer::m_rxTrace))
++  ;
++  return tid;
++}
++
++TcpServer::TcpServer ()
++{
++  NS_LOG_FUNCTION (this);
++  m_socket = 0;
++}
++
++TcpServer::~TcpServer()
++{
++  NS_LOG_FUNCTION (this);
++}
++
++Ptr<Socket>
++TcpServer::GetListeningSocket (void) const
++{
++  NS_LOG_FUNCTION (this);
++  return m_socket;
++}
++
++std::list<Ptr<Socket> >
++TcpServer::GetAcceptedSockets (void) const
++{
++  NS_LOG_FUNCTION (this);
++  return m_socketList;
++}
++
++void TcpServer::DoDispose (void)
++{
++  NS_LOG_FUNCTION (this);
++  m_socket = 0;
++  m_socketList.clear ();
++
++  // chain up
++  Application::DoDispose ();
++}
++
++
++// Application Methods
++void TcpServer::StartApplication ()    // Called at time specified by Start
++{
++  NS_LOG_FUNCTION (this);
++  // Create the socket if not already
++  if (!m_socket)
++    {
++      m_socket = Socket::CreateSocket (GetNode (), m_tid);
++      m_socket->Bind (m_local);
++      m_socket->Listen ();
++      if (addressUtils::IsMulticast (m_local))
++        {
++          Ptr<UdpSocket> udpSocket = DynamicCast<UdpSocket> (m_socket);
++          if (udpSocket)
++            {
++              // equivalent to setsockopt (MCAST_JOIN_GROUP)
++              udpSocket->MulticastJoinGroup (0, m_local);
++            }
++          else
++            {
++              NS_FATAL_ERROR ("Error: joining multicast on a non-UDP socket");
++            }
++        }
++    }
++
++  m_socket->SetRecvCallback (MakeCallback (&TcpServer::HandleRead, this));
++  m_socket->SetAcceptCallback (
++    MakeNullCallback<bool, Ptr<Socket>, const Address &> (),
++	MakeCallback (&TcpServer::HandleAccept, this));
++  m_socket->SetCloseCallbacks (
++	MakeCallback (&TcpServer::HandlePeerClose, this),
++	MakeCallback (&TcpServer::HandlePeerError, this));
++}
++
++void TcpServer::StopApplication ()     // Called at time specified by Stop
++{
++  NS_LOG_FUNCTION (this);
++  while(!m_socketList.empty ()) //these are accepted sockets, close them
++    {
++      Ptr<Socket> acceptedSocket = m_socketList.front ();
++      m_socketList.pop_front ();
++      acceptedSocket->Close ();
++    }
++  if (m_socket) 
++    {
++      m_socket->Close ();
++      m_socket->SetRecvCallback (MakeNullCallback<void, Ptr<Socket> > ());
++    }
++}
++
++void TcpServer::HandleRead (Ptr<Socket> socket)
++{
++  NS_LOG_FUNCTION (this << socket);
++  Ptr<Packet> packet;
++  Address from;
++  while ((packet = socket->RecvFrom (from)))
++    {
++      if (packet->GetSize () == 0)
++        { //EOF
++          break;
++        }
++      if (InetSocketAddress::IsMatchingType (from))
++        {
++          NS_LOG_INFO ("At time " << Simulator::Now ().GetSeconds ()
++                       << "s packet sink received "
++                       <<  packet->GetSize () << " bytes from "
++                       << InetSocketAddress::ConvertFrom(from).GetIpv4 ()
++                       << " port " << InetSocketAddress::ConvertFrom (from).GetPort ());
++
++          double timeToSend=this->dataReceiveHandler(socketToHandler[PeekPointer(socket)], (unsigned char*)packet->PeekData(), packet->GetSize());
++          if(timeToSend>=0){
++              Simulator::Schedule(Seconds(timeToSend),&TcpServer::HandleSend,this,socket,socket->GetTxAvailable());
++              socket->SetSendCallback (MakeCallback (&TcpServer::HandleSend, this));
++          }
++        }
++      m_rxTrace (packet, from);
++    }
++}
++
++
++void TcpServer::HandlePeerClose (Ptr<Socket> socket)
++{
++  if(socketToHandler.find(PeekPointer(socket))!=socketToHandler.end())
++  {
++    this->connectionCloseHandler(socketToHandler[PeekPointer(socket)]);
++    socketToHandler.erase(PeekPointer(socket));
++  }
++  NS_LOG_FUNCTION (this << socket);
++}
++ 
++void TcpServer::HandlePeerError (Ptr<Socket> socket)
++{
++  if(socketToHandler.find(PeekPointer(socket))!=socketToHandler.end()){
++    this->connectionErrorHandler(socketToHandler[PeekPointer(socket)]);
++    socketToHandler.erase(PeekPointer(socket));
++  }
++  NS_LOG_FUNCTION (this << socket);
++}
++ 
++
++void TcpServer::HandleAccept (Ptr<Socket> s, const Address& from)
++{
++  NS_LOG_FUNCTION (this << s << from);
++  s->SetRecvCallback (MakeCallback (&TcpServer::HandleRead, this));
++  m_socketList.push_back (s);
++  if(InetSocketAddress::IsMatchingType(from))
++  {
++    unsigned char bytes[4];
++    InetSocketAddress a=InetSocketAddress::ConvertFrom(from);
++    a.GetIpv4().Serialize(bytes);
++    socketToHandler[PeekPointer(s)]=this->acceptHandler(acceptHandlerUserData, bytes[0], bytes[1], bytes[2], bytes[3], a.GetPort());
++
++  }
++}
++
++void TcpServer::HandleSend(Ptr<Socket> s, uint32_t maximumDataSendable)
++{
++    if(socketToHandler.find(PeekPointer(s))!=socketToHandler.end())
++      {
++        Bytes bytes=this->dataSendHandler(socketToHandler[PeekPointer(s)],maximumDataSendable);
++        s->Send(bytes.data,bytes.length,0);
++        if(bytes.length<maximumDataSendable)
++          {
++            //Close the connection, the data's done
++            this->freeResourcesHandler(socketToHandler[PeekPointer(s)]);
++            socketToHandler.erase(PeekPointer(s));
++            s->Close();
++          }
++      }
++    NS_LOG_FUNCTION("Handle send request");
++}
++} // Namespace ns3
++
++using namespace ns3;
++void SetServerAcceptHandler(int nodeIndex,int applicationIndex, ConnectionAcceptHandler handler,void* userData){
++    Ptr<Node> node = NodeList::GetNode(nodeIndex);
++    Ptr<Application> app = node->GetApplication(applicationIndex);
++    TcpServer* server = static_cast<TcpServer*>(PeekPointer(app));
++    server->SetAcceptHandler(handler,userData);
++}
++
++void SetServerDataReceiveHandler(int nodeIndex,int applicationIndex, DataReceiveHandler handler){
++    Ptr<Node> node = NodeList::GetNode(nodeIndex);
++    Ptr<Application> app = node->GetApplication(applicationIndex);
++    TcpServer* server = static_cast<TcpServer*>(PeekPointer(app));
++    server->SetDataReceiveHandler(handler);
++}
++
++void SetServerDataSendHandler(int nodeIndex,int applicationIndex, DataSendHandler handler){
++    Ptr<Node> node = NodeList::GetNode(nodeIndex);
++    Ptr<Application> app = node->GetApplication(applicationIndex);
++    TcpServer* server = static_cast<TcpServer*>(PeekPointer(app));
++    server->SetDataSendHandler(handler);
++}
++
++void SetServerConnectionCloseHandler(int nodeIndex,int applicationIndex, ConnectionCloseHandler handler){
++    Ptr<Node> node = NodeList::GetNode(nodeIndex);
++    Ptr<Application> app = node->GetApplication(applicationIndex);
++    TcpServer* server = static_cast<TcpServer*>(PeekPointer(app));
++    server->SetConnectionCloseHandler(handler);
++}
++
++void SetServerConnectionErrorHandler(int nodeIndex,int applicationIndex, ConnectionErrorHandler handler){
++    Ptr<Node> node = NodeList::GetNode(nodeIndex);
++    Ptr<Application> app = node->GetApplication(applicationIndex);
++    TcpServer* server = static_cast<TcpServer*>(PeekPointer(app));
++    server->SetConnectionErrorHandler(handler);
++}
++
++void SetServerFreeResourcesHandler(int nodeIndex,int applicationIndex, FreeResourcesHandler handler){
++    Ptr<Node> node = NodeList::GetNode(nodeIndex);
++    Ptr<Application> app = node->GetApplication(applicationIndex);
++    TcpServer* server = static_cast<TcpServer*>(PeekPointer(app));
++    server->SetFreeResourcesHandler(handler);
++}
+Index: src/applications/model/tcp-server.h
+===================================================================
+new file mode 100644
+--- /dev/null
++++ b/src/applications/model/tcp-server.h
+@@ -0,0 +1,156 @@
++/* -*- Mode:C++; c-file-style:"gnu"; indent-tabs-mode:nil; -*- */
++/*
++ * Copyright 2014 Sudarshan S, Aditya Kamath, Bhargav Reddy
++ *                 (Students at IIT Hyderabad)
++ * 
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License version 2 as
++ * published by the Free Software Foundation;
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License
++ * along with this program; if not, write to the Free Software
++ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
++ *
++ * Author:  Sudarshan S, Aditya Kamath, Bhargav Reddy
++ */
++
++#ifndef TCP_SERVER_H
++#define TCP_SERVER_H
++
++#include "ns3/application.h"
++#include "ns3/event-id.h"
++#include "ns3/ptr.h"
++#include "ns3/traced-callback.h"
++#include "ns3/address.h"
++#include "ns3/simulator.h"
++#include "ns3/socket.h"
++#include "ns3/nstime.h"
++#include "python-model.h"
++#include "ns3/double.h"
++#include <map>
++
++namespace ns3 {
++
++class Address;
++class Socket;
++class Packet;
++
++/**
++ * \ingroup applications 
++ * \defgroup TcpServer TcpServer
++ *
++ * This application was written to allow ns-3 server callbacks to be registered to
++ * arbitrary C functions at runtime. We also provide a python module with several
++ * callbacks that together with this class allow arbitrary application layer
++ * protocols to be implemented in python.
++ */
++
++/**
++ * \ingroup TcpServer
++ *
++ * \brief Receive and consume traffic generated to an IP address and port
++ *
++ * This application was written to allow ns-3 server callbacks to be registered to
++ * arbitrary C functions at runtime. We also provide a python module with several
++ * callbacks that together with this class allow arbitrary application layer
++ * protocols to be implemented in python.
++ *
++ * The constructor specifies the Address (IP address and port) and the 
++ * transport protocol to use.
++ */
++class TcpServer : public Application
++{
++public:
++
++  /**
++   * \brief Get the type ID.
++   * \return the object TypeId
++   */
++  static TypeId GetTypeId (void);
++  TcpServer ();
++
++  virtual ~TcpServer ();
++
++  /**
++   * \return pointer to listening socket
++   */
++  Ptr<Socket> GetListeningSocket (void) const;
++
++  /**
++   * \return list of pointers to accepted sockets
++   */
++  std::list<Ptr<Socket> > GetAcceptedSockets (void) const;
++
++  void SetAcceptHandler(ConnectionAcceptHandler handler, void* userData){this->acceptHandler=handler;this->acceptHandlerUserData=userData;}
++  void SetDataReceiveHandler(DataReceiveHandler handler){this->dataReceiveHandler=handler;}
++  void SetDataSendHandler(DataSendHandler handler){this->dataSendHandler=handler;}
++  void SetConnectionCloseHandler(ConnectionCloseHandler handler){this->connectionCloseHandler=handler;}
++  void SetConnectionErrorHandler(ConnectionCloseHandler handler){this->connectionErrorHandler=handler;}
++  void SetFreeResourcesHandler(FreeResourcesHandler handler){this->freeResourcesHandler=handler;}
++protected:
++  virtual void DoDispose (void);
++private:
++  // inherited from Application base class.
++  virtual void StartApplication (void);    // Called at time specified by Start
++  virtual void StopApplication (void);     // Called at time specified by Stop
++
++  DataSendHandler dataSendHandler;
++  FreeResourcesHandler freeResourcesHandler;
++
++  /**
++   * \brief Handle a packet received by the application
++   * \param socket the receiving socket
++   */
++  void HandleRead (Ptr<Socket> socket);
++  DataReceiveHandler dataReceiveHandler;
++  /**
++   * \brief Handle an incoming connection
++   * \param socket the incoming connection socket
++   * \param from the address the connection is from
++   */
++  void HandleAccept (Ptr<Socket> socket, const Address& from);
++  ConnectionAcceptHandler acceptHandler;
++  void* acceptHandlerUserData;
++  /**
++   * \brief Handle an connection close
++   * \param socket the connected socket
++   */
++  void HandlePeerClose (Ptr<Socket> socket);
++  ConnectionCloseHandler connectionCloseHandler;
++  /**
++   * \brief Handle an connection error
++   * \param socket the connected socket
++   */
++  void HandlePeerError (Ptr<Socket> socket);
++  ConnectionErrorHandler connectionErrorHandler;
++
++  // In the case of TCP, each socket accept returns a new socket, so the 
++  // listening socket is stored separately from the accepted sockets
++  Ptr<Socket>     m_socket;       //!< Listening socket
++  std::list<Ptr<Socket> > m_socketList; //!< the accepted sockets
++
++  Address         m_local;        //!< Local address to bind to
++  TypeId          m_tid;          //!< Protocol TypeId
++
++  /// Traced Callback: received packets, source address.
++  TracedCallback<Ptr<const Packet>, const Address &> m_rxTrace;
++
++  std::map<Socket*, void*> socketToHandler;
++  void HandleSend(Ptr<Socket> s, uint32_t maxSize);
++
++};
++
++} // namespace ns3
++void SetServerAcceptHandler(int nodeIndex,int applicationIndex, ConnectionAcceptHandler handler,void* userData);
++void SetServerDataReceiveHandler(int nodeIndex,int applicationIndex, DataReceiveHandler handler);
++void SetServerConnectionCloseHandler(int nodeIndex,int applicationIndex, ConnectionCloseHandler handler);
++void SetServerConnectionErrorHandler(int nodeIndex,int applicationIndex, ConnectionErrorHandler handler);
++void SetServerDataSendHandler(int nodeIndex,int applicationIndex, DataSendHandler handler);
++void SetServerFreeResourcesHandler(int nodeIndex,int applicationIndex, FreeResourcesHandler handler);
++
++#endif /* TCP_SERVER_H */
+Index: src/applications/wscript
+===================================================================
+--- a/src/applications/wscript
++++ b/src/applications/wscript
+@@ -4,8 +4,10 @@
+     module = bld.create_ns3_module('applications', ['internet', 'config-store','stats'])
+     module.source = [
+         'model/bulk-send-application.cc',
++        'model/tcp-client.cc',
+         'model/onoff-application.cc',
+         'model/packet-sink.cc',
++        'model/tcp-server.cc',
+         'model/ping6.cc',
+         'model/radvd.cc',
+         'model/radvd-interface.cc',
+@@ -20,8 +22,10 @@
+         'model/v4ping.cc',
+         'model/application-packet-probe.cc',
+         'helper/bulk-send-helper.cc',
++        'helper/tcp-client-helper.cc',
+         'helper/on-off-helper.cc',
+         'helper/packet-sink-helper.cc',
++        'helper/tcp-server-helper.cc',
+         'helper/ping6-helper.cc',
+         'helper/udp-client-server-helper.cc',
+         'helper/udp-echo-helper.cc',
+@@ -38,8 +42,10 @@
+     headers.module = 'applications'
+     headers.source = [
+         'model/bulk-send-application.h',
++        'model/tcp-client.h',
+         'model/onoff-application.h',
+         'model/packet-sink.h',
++        'model/tcp-server.h',
+         'model/ping6.h',
+         'model/radvd.h',
+         'model/radvd-interface.h',
+@@ -53,9 +59,12 @@
+         'model/udp-echo-server.h',
+         'model/v4ping.h',
+         'model/application-packet-probe.h',
++        'model/python-model.h',
+         'helper/bulk-send-helper.h',
++        'helper/tcp-client-helper.h',
+         'helper/on-off-helper.h',
+         'helper/packet-sink-helper.h',
++        'helper/tcp-server-helper.h',
+         'helper/ping6-helper.h',
+         'helper/udp-client-server-helper.h',
+         'helper/udp-echo-helper.h',

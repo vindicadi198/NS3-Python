@@ -1,0 +1,161 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>network.creator &mdash; CS6220 Project 1.0-final documentation</title>
+    
+    <link rel="stylesheet" href="../../_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '1.0-final',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="CS6220 Project 1.0-final documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">CS6220 Project 1.0-final documentation</a> &raquo;</li>
+          <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for network.creator</h1><div class="highlight"><pre>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">print_function</span>
+
+<span class="kn">import</span> <span class="nn">ns.network</span>
+<span class="kn">import</span> <span class="nn">ns.mobility</span>
+<span class="kn">import</span> <span class="nn">ns.point_to_point</span>
+
+
+<div class="viewcode-block" id="NetworkCreator"><a class="viewcode-back" href="../../network.html#network.creator.NetworkCreator">[docs]</a><span class="k">class</span> <span class="nc">NetworkCreator</span><span class="p">:</span>
+
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    This class creates an arbitrary network comprising of identical point to point links. It uses a constant position</span>
+<span class="sd">    mobility model to ensure that the network renders correctly in the visualizer. It simplifies the creation of</span>
+<span class="sd">    multiple point to point links and also automatically handles IP address assignment.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+<div class="viewcode-block" id="NetworkCreator.__init__"><a class="viewcode-back" href="../../network.html#network.creator.NetworkCreator.__init__">[docs]</a>    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_nodes</span><span class="p">,</span> <span class="n">positions</span><span class="p">,</span> <span class="n">network</span><span class="p">,</span> <span class="n">subnet</span><span class="p">,</span> <span class="n">data_rate</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        This function creates a new instance of the network creator containing `num_nodes` nodes placed in positions</span>
+<span class="sd">        specified by `positions`. Point to point links created by this `NetworkCreator` will have the data rate</span>
+<span class="sd">        specified by `data_rate`, and will have IP addresses assigned in networks similar to the one specified by</span>
+<span class="sd">        `network` and `subnet`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># create the nodes comprising the network</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nodes</span> <span class="o">=</span> <span class="n">ns</span><span class="o">.</span><span class="n">network</span><span class="o">.</span><span class="n">NodeContainer</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Create</span><span class="p">(</span><span class="n">num_nodes</span><span class="p">)</span>
+
+        <span class="c"># set the positions of the nodes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mobility</span> <span class="o">=</span> <span class="n">ns</span><span class="o">.</span><span class="n">mobility</span><span class="o">.</span><span class="n">MobilityHelper</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">position_alloc</span> <span class="o">=</span> <span class="n">ns</span><span class="o">.</span><span class="n">mobility</span><span class="o">.</span><span class="n">ListPositionAllocator</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">position</span> <span class="ow">in</span> <span class="n">positions</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">position_alloc</span><span class="o">.</span><span class="n">Add</span><span class="p">(</span><span class="n">position</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mobility</span><span class="o">.</span><span class="n">SetPositionAllocator</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">position_alloc</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mobility</span><span class="o">.</span><span class="n">SetMobilityModel</span><span class="p">(</span><span class="s">&quot;ns3::ConstantPositionMobilityModel&quot;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mobility</span><span class="o">.</span><span class="n">Install</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nodes</span><span class="p">)</span>
+
+        <span class="c"># fix the data rate for point to point links created by this network creator</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">point_to_point</span> <span class="o">=</span> <span class="n">ns</span><span class="o">.</span><span class="n">point_to_point</span><span class="o">.</span><span class="n">PointToPointHelper</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">point_to_point</span><span class="o">.</span><span class="n">SetDeviceAttribute</span><span class="p">(</span><span class="s">&quot;DataRate&quot;</span><span class="p">,</span> <span class="n">ns</span><span class="o">.</span><span class="n">core</span><span class="o">.</span><span class="n">StringValue</span><span class="p">(</span><span class="n">data_rate</span><span class="p">))</span>
+
+        <span class="c"># install IPv4 support onto the nodes</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack</span> <span class="o">=</span> <span class="n">ns</span><span class="o">.</span><span class="n">internet</span><span class="o">.</span><span class="n">InternetStackHelper</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">stack</span><span class="o">.</span><span class="n">Install</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nodes</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">allocator</span> <span class="o">=</span> <span class="n">ns</span><span class="o">.</span><span class="n">internet</span><span class="o">.</span><span class="n">Ipv4AddressHelper</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">allocator</span><span class="o">.</span><span class="n">SetBase</span><span class="p">(</span><span class="n">ns</span><span class="o">.</span><span class="n">network</span><span class="o">.</span><span class="n">Ipv4Address</span><span class="p">(</span><span class="n">network</span><span class="p">),</span> <span class="n">ns</span><span class="o">.</span><span class="n">network</span><span class="o">.</span><span class="n">Ipv4Mask</span><span class="p">(</span><span class="n">subnet</span><span class="p">))</span>
+</div>
+<div class="viewcode-block" id="NetworkCreator.create_link"><a class="viewcode-back" href="../../network.html#network.creator.NetworkCreator.create_link">[docs]</a>    <span class="k">def</span> <span class="nf">create_link</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">index1</span><span class="p">,</span> <span class="n">index2</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        This code creates a new point to point link between the node at index `index1` and the node at index `index2`. It</span>
+<span class="sd">        then proceeds to assign an IP address to the nodes automatically.</span>
+
+<span class="sd">        :return: The NetDeviceContainer</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">container</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">point_to_point</span><span class="o">.</span><span class="n">Install</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Get</span><span class="p">(</span><span class="n">index1</span><span class="p">),</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Get</span><span class="p">(</span><span class="n">index2</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">allocator</span><span class="o">.</span><span class="n">NewNetwork</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">allocator</span><span class="o">.</span><span class="n">Assign</span><span class="p">(</span><span class="n">container</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">container</span>
+</div>
+<div class="viewcode-block" id="NetworkCreator.get_static_routes"><a class="viewcode-back" href="../../network.html#network.creator.NetworkCreator.get_static_routes">[docs]</a>    <span class="k">def</span> <span class="nf">get_static_routes</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        This function extracts the static routing tables from the nodes in this `NetworkCreator`</span>
+<span class="sd">        :return: an array containing the static routing tables</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">routing_helper</span> <span class="o">=</span> <span class="n">ns</span><span class="o">.</span><span class="n">internet</span><span class="o">.</span><span class="n">Ipv4StaticRoutingHelper</span><span class="p">()</span>
+        <span class="n">ipv4_id</span> <span class="o">=</span> <span class="n">ns</span><span class="o">.</span><span class="n">internet</span><span class="o">.</span><span class="n">Ipv4</span><span class="o">.</span><span class="n">GetTypeId</span><span class="p">()</span>
+        <span class="n">static_routes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">GetN</span><span class="p">()):</span>
+            <span class="n">static_routes</span><span class="o">.</span><span class="n">append</span><span class="p">((</span><span class="n">routing_helper</span><span class="o">.</span><span class="n">GetStaticRouting</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">nodes</span><span class="o">.</span><span class="n">Get</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="o">.</span><span class="n">GetObject</span><span class="p">(</span><span class="n">ipv4_id</span><span class="p">))))</span>
+        <span class="k">return</span> <span class="n">static_routes</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">CS6220 Project 1.0-final documentation</a> &raquo;</li>
+          <li><a href="../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, Sudarshan S, Aditya Kamath and Bhargav Reddy.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    </div>
+  </body>
+</html>

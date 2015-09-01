@@ -1,0 +1,186 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Client Module &mdash; CS6220 Project 1.0-final documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.0-final',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="CS6220 Project 1.0-final documentation" href="index.html" />
+    <link rel="next" title="Network Topology Helper Module" href="network.html" />
+    <link rel="prev" title="Server Module" href="tcpserver.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="network.html" title="Network Topology Helper Module"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="tcpserver.html" title="Server Module"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">CS6220 Project 1.0-final documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="client-module">
+<h1>Client Module<a class="headerlink" href="#client-module" title="Permalink to this headline">¶</a></h1>
+<p>This module helps in creating Client and process the requests (send, read, terminate, etc)</p>
+<hr class="docutils" />
+<dl class="class">
+<dt id="proto.client.TcpClient">
+<em class="property">class </em><tt class="descclassname">proto.client.</tt><tt class="descname">TcpClient</tt><big>(</big><em>name</em><big>)</big><a class="reference internal" href="_modules/proto/client.html#TcpClient"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#proto.client.TcpClient" title="Permalink to this definition">¶</a></dt>
+<dd><p>Implements the sample TCP Client handler
+ALL <cite>handle_</cite> methods defined below MUST be implemented to avoid segfaults
+(Even if a method needs to do nothing, implement it,
+making it a no-op by setting its body to &#8216;pass&#8217;)</p>
+<dl class="method">
+<dt id="proto.client.TcpClient.__del__">
+<tt class="descname">__del__</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/proto/client.html#TcpClient.__del__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#proto.client.TcpClient.__del__" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function is called when the C side of the code deallocates resources</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="proto.client.TcpClient.handle_peer_close">
+<tt class="descname">handle_peer_close</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/proto/client.html#TcpClient.handle_peer_close"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#proto.client.TcpClient.handle_peer_close" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when the connection is terminated.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">Server sends the FIN, ACK packet to terminate the connection by four way hand shake</p>
+</div>
+</dd></dl>
+
+<dl class="method">
+<dt id="proto.client.TcpClient.handle_peer_error">
+<tt class="descname">handle_peer_error</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/proto/client.html#TcpClient.handle_peer_error"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#proto.client.TcpClient.handle_peer_error" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function is called when the connection is being dropped due to
+errors.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="proto.client.TcpClient.handle_read">
+<tt class="descname">handle_read</tt><big>(</big><em>data</em><big>)</big><a class="reference internal" href="_modules/proto/client.html#TcpClient.handle_read"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#proto.client.TcpClient.handle_read" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when new data is received at the socket
+and generates the random variable for read time</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="proto.client.TcpClient.handle_send">
+<tt class="descname">handle_send</tt><big>(</big><em>length</em><big>)</big><a class="reference internal" href="_modules/proto/client.html#TcpClient.handle_send"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#proto.client.TcpClient.handle_send" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when the socket is free and data has to be sent with
+the max capacity of length.</p>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">If <cite>length</cite> bytes of data is sent then the connection is 
+assumed to have some more data to be sent or else the connection
+is terminated</p>
+</div>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Data in string format.</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="proto.client.TcpClient.set_client_port">
+<tt class="descname">set_client_port</tt><big>(</big><em>port</em><big>)</big><a class="reference internal" href="_modules/proto/client.html#TcpClient.set_client_port"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#proto.client.TcpClient.set_client_port" title="Permalink to this definition">¶</a></dt>
+<dd><p>Called when the connection is initialized with port
+as the parameter</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="tcpserver.html"
+                        title="previous chapter">Server Module</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="network.html"
+                        title="next chapter">Network Topology Helper Module</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/tcpclient.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="network.html" title="Network Topology Helper Module"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="tcpserver.html" title="Server Module"
+             >previous</a> |</li>
+        <li><a href="index.html">CS6220 Project 1.0-final documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, Sudarshan S, Aditya Kamath and Bhargav Reddy.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    </div>
+  </body>
+</html>

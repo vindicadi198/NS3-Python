@@ -1,0 +1,210 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Cython Connections Helper Module &mdash; CS6220 Project 1.0-final documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.0-final',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="CS6220 Project 1.0-final documentation" href="index.html" />
+    <link rel="next" title="Main Python Module" href="submission.html" />
+    <link rel="prev" title="Network Topology Helper Module" href="network.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="submission.html" title="Main Python Module"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="network.html" title="Network Topology Helper Module"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">CS6220 Project 1.0-final documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="cython-connections-helper-module">
+<h1>Cython Connections Helper Module<a class="headerlink" href="#cython-connections-helper-module" title="Permalink to this headline">¶</a></h1>
+<p>This module helps in bridging the python and c functions and callbacks</p>
+<hr class="docutils" />
+<span class="target" id="module-binding"></span><dl class="function">
+<dt id="binding.client_connect_handlers">
+<tt class="descclassname">binding.</tt><tt class="descname">client_connect_handlers</tt><big>(</big><big>)</big><a class="headerlink" href="#binding.client_connect_handlers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets up the cython handlers correctly for the TcpClient application
+with index <cite>application_index</cite> running on node with index <cite>node_index</cite>.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Param:</th><td class="field-body">node_id the global index of the node to install the handlers on</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Param:</th><td class="field-body">application_index the index of the TcpClient application on the node</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<p class="last">This function has to be called before any attempt to establish
+connections from the client else segfaults are guaranteed</p>
+</div>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<p class="last">This function does not perform any safety checks whatsoever.
+Using with wrong indices can lead to segfaults</p>
+</div>
+</dd></dl>
+
+<dl class="function">
+<dt id="binding.client_establish_session">
+<tt class="descclassname">binding.</tt><tt class="descname">client_establish_session</tt><big>(</big><big>)</big><a class="headerlink" href="#binding.client_establish_session" title="Permalink to this definition">¶</a></dt>
+<dd><p>Establishes a new session that will connect to the server at <cite>remote_ip</cite> running on port <cite>remote_port</cite></p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Param:</th><td class="field-body">node_id the global index of the node to install the handlers on</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Param:</th><td class="field-body">application_index the index of the TcpClient application on the node</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Param:</th><td class="field-body">time the time at which the session starts</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Param:</th><td class="field-body">remote_ip the remote server&#8217;s address</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Param:</th><td class="field-body">remote_port the port on which remote server is running</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<p class="last">This function will automatically adjust python reference counts to ensure that the handler and the IP string are not garbage collected till the session ends</p>
+</div>
+</dd></dl>
+
+<dl class="function">
+<dt id="binding.setHandlers">
+<tt class="descclassname">binding.</tt><tt class="descname">setHandlers</tt><big>(</big><big>)</big><a class="headerlink" href="#binding.setHandlers" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sets up the cython handlers correctly for the TcpServer application with index <cite>application_index</cite> running on node with
+index <cite>node_index</cite>. Additionally, sets up the connection accept handler to the object provided.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Param:</th><td class="field-body">node_id the global index of the node to install the handlers on</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Param:</th><td class="field-body">application_index the index of the TcpServer application on the node</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Param:</th><td class="field-body">accept_handler pointer to python function that will be called when a new connection is requested</td>
+</tr>
+</tbody>
+</table>
+<div class="admonition note">
+<p class="first admonition-title">Note</p>
+<dl class="last docutils">
+<dt>This function will automatically adjust reference counts to ensure that</dt>
+<dd><ol class="first last arabic simple">
+<li>The connection accept handler will not be garbage collected till the server closes</li>
+<li>The actual request handlers will not be garbage collected till they are done sending data</li>
+</ol>
+</dd>
+</dl>
+</div>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<p class="last">This function has to be called before any attempt to establish connections to the server else segfaults are guaranteed</p>
+</div>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<p class="last">This function does not perform any safety checks whatsoever. Using with wrong indices can lead to segfaults</p>
+</div>
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="network.html"
+                        title="previous chapter">Network Topology Helper Module</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="submission.html"
+                        title="next chapter">Main Python Module</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/binding.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="submission.html" title="Main Python Module"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="network.html" title="Network Topology Helper Module"
+             >previous</a> |</li>
+        <li><a href="index.html">CS6220 Project 1.0-final documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, Sudarshan S, Aditya Kamath and Bhargav Reddy.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    </div>
+  </body>
+</html>

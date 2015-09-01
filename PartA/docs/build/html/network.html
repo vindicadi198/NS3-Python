@@ -1,0 +1,159 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>Network Topology Helper Module &mdash; CS6220 Project 1.0-final documentation</title>
+    
+    <link rel="stylesheet" href="_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     '1.0-final',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="CS6220 Project 1.0-final documentation" href="index.html" />
+    <link rel="next" title="Cython Connections Helper Module" href="binding.html" />
+    <link rel="prev" title="Client Module" href="tcpclient.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="binding.html" title="Cython Connections Helper Module"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="tcpclient.html" title="Client Module"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">CS6220 Project 1.0-final documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="network-topology-helper-module">
+<h1>Network Topology Helper Module<a class="headerlink" href="#network-topology-helper-module" title="Permalink to this headline">¶</a></h1>
+<p>This module provides helper functions and classes that make it easier to create a complex grid
+topology containing point to point links</p>
+<hr class="docutils" />
+<dl class="class">
+<dt id="network.creator.NetworkCreator">
+<em class="property">class </em><tt class="descclassname">network.creator.</tt><tt class="descname">NetworkCreator</tt><big>(</big><em>num_nodes</em>, <em>positions</em>, <em>network</em>, <em>subnet</em>, <em>data_rate</em><big>)</big><a class="reference internal" href="_modules/network/creator.html#NetworkCreator"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#network.creator.NetworkCreator" title="Permalink to this definition">¶</a></dt>
+<dd><p>This class creates an arbitrary network comprising of identical point to point links. It uses a constant position
+mobility model to ensure that the network renders correctly in the visualizer. It simplifies the creation of
+multiple point to point links and also automatically handles IP address assignment.</p>
+<dl class="method">
+<dt id="network.creator.NetworkCreator.__init__">
+<tt class="descname">__init__</tt><big>(</big><em>num_nodes</em>, <em>positions</em>, <em>network</em>, <em>subnet</em>, <em>data_rate</em><big>)</big><a class="reference internal" href="_modules/network/creator.html#NetworkCreator.__init__"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#network.creator.NetworkCreator.__init__" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function creates a new instance of the network creator containing <cite>num_nodes</cite> nodes placed in positions
+specified by <cite>positions</cite>. Point to point links created by this <cite>NetworkCreator</cite> will have the data rate
+specified by <cite>data_rate</cite>, and will have IP addresses assigned in networks similar to the one specified by
+<cite>network</cite> and <cite>subnet</cite>.</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="network.creator.NetworkCreator.create_link">
+<tt class="descname">create_link</tt><big>(</big><em>index1</em>, <em>index2</em><big>)</big><a class="reference internal" href="_modules/network/creator.html#NetworkCreator.create_link"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#network.creator.NetworkCreator.create_link" title="Permalink to this definition">¶</a></dt>
+<dd><p>This code creates a new point to point link between the node at index <cite>index1</cite> and the node at index <cite>index2</cite>. It
+then proceeds to assign an IP address to the nodes automatically.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">The NetDeviceContainer</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="network.creator.NetworkCreator.get_static_routes">
+<tt class="descname">get_static_routes</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/network/creator.html#NetworkCreator.get_static_routes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#network.creator.NetworkCreator.get_static_routes" title="Permalink to this definition">¶</a></dt>
+<dd><p>This function extracts the static routing tables from the nodes in this <cite>NetworkCreator</cite>
+:return: an array containing the static routing tables</p>
+</dd></dl>
+
+</dd></dl>
+
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="tcpclient.html"
+                        title="previous chapter">Client Module</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="binding.html"
+                        title="next chapter">Cython Connections Helper Module</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/network.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="binding.html" title="Cython Connections Helper Module"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="tcpclient.html" title="Client Module"
+             >previous</a> |</li>
+        <li><a href="index.html">CS6220 Project 1.0-final documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, Sudarshan S, Aditya Kamath and Bhargav Reddy.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    </div>
+  </body>
+</html>

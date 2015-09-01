@@ -1,0 +1,54 @@
+Topics in Networks - NS3
+------------------------
+
+Group 20:
+--------
+Sudarshan S CS10B036
+Aditya V Kamath CS11B001
+G Bhargav Reddy CS11B012
+
+Project Part A
+--------------
+
+Dependencies: Cython, NS-3 with Python bindings enabled
+
+Steps to install:
+Apply the patch group20_partA.patch by running the following command:
+
+  git apply group20_partA.patch
+
+in the ns-allinone-3.xx/ns-3.xx folder. The patch should apply cleanly.
+
+Configure the build system:
+
+  ./waf configure
+  ./waf --apiscan=applications
+  ./waf
+
+Once the compilation is done, you can now run the test examples:
+  cd ns-3.xx
+  cd python-demo
+  ./configure
+  make
+
+This should create a .so file in the same folder.
+Now run the example as:
+  cd ..
+  ./waf --pyrun python-demo/demo.py
+
+
+Project Part B
+--------------
+Dependencies: NS3 and nothing else
+
+Steps to setup:
+Apply the patch group20_partB.patch by running the following command:
+
+  git apply group20_partB.patch
+
+in the ns-allinone-3.xx folder.
+
+The copy the example file to the scratch folder. To test it run:
+  ./waf --run scratch/policy-routing 
+
+The example can also be run using the visualiser.

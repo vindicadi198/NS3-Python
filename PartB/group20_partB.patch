@@ -1,0 +1,101 @@
+From fac462a2e0e2f38047ce020f799d16a66e26ee02 Mon Sep 17 00:00:00 2001
+From: Aditya Kamath <cs11b001@iith.ac.in>
+Date: Sun, 27 Apr 2014 12:04:38 +0530
+Subject: [PATCH] Policy based routing
+
+---
+ ns-3.19/src/internet/model/ipv6-static-routing.cc | 14 +++++++++++++
+ ns-3.19/src/internet/model/ipv6-static-routing.h  | 24 +++++++++++++++++++++++
+ 2 files changed, 38 insertions(+)
+
+diff --git a/ns-3.19/src/internet/model/ipv6-static-routing.cc b/ns-3.19/src/internet/model/ipv6-static-routing.cc
+index 861d96a..8c183fe 100644
+--- a/ns-3.19/src/internet/model/ipv6-static-routing.cc
++++ b/ns-3.19/src/internet/model/ipv6-static-routing.cc
+@@ -27,6 +27,8 @@
+ #include "ns3/net-device.h"
+ #include "ns3/names.h"
+ 
++#include "ns3/tcp-header.h"
++
+ #include "ipv6-static-routing.h"
+ #include "ipv6-routing-table-entry.h"
+ 
+@@ -566,6 +568,18 @@ Ptr<Ipv6Route> Ipv6StaticRouting::RouteOutput (Ptr<Packet> p, const Ipv6Header &
+       NS_LOG_LOGIC ("RouteOutput ()::Multicast destination");
+     }
+ 
++  {
++	  //Intercept packets here
++	  TcpHeader tcpHeader;
++	  if(this->callback && PeekPointer(p) && p->PeekHeader(tcpHeader)){
++      // Call the callback for policy based route
++		  Ptr<Ipv6Route> alternateRoute=callback(&tcpHeader,&header,user_data);
++		  // If policy returns NULL fallback to default behaviour
++          if(alternateRoute)
++			  return alternateRoute;
++	  }
++  }
++  // Default behaviour if policy not implemented or not applied
+   rtentry = LookupStatic (destination, oif);
+   if (rtentry)
+     {
+diff --git a/ns-3.19/src/internet/model/ipv6-static-routing.h b/ns-3.19/src/internet/model/ipv6-static-routing.h
+index 39db913..c1ec0ae 100644
+--- a/ns-3.19/src/internet/model/ipv6-static-routing.h
++++ b/ns-3.19/src/internet/model/ipv6-static-routing.h
+@@ -31,6 +31,8 @@
+ #include "ns3/ipv6-header.h"
+ #include "ns3/ipv6-routing-protocol.h"
+ 
++#include "ns3/tcp-header.h"
++
+ namespace ns3 {
+ 
+ class Packet;
+@@ -41,6 +43,12 @@ class Node;
+ class Ipv6RoutingTableEntry;
+ class Ipv6MulticastRoutingTableEntry;
+ 
++/*
++ * \brief Callback type for policy based routing
++ * Setting this callback will intercept all TCP packets and send its headers
++ */
++typedef Ptr<Ipv6Route> (*RouteCallback) (const TcpHeader* tcpHeader, const Ipv6Header* ipHeader, void* user_data);
++
+ /**
+  * \ingroup internet
+  * \defgroup ipv6StaticRouting Ipv6StaticRouting
+@@ -243,6 +251,16 @@ public:
+   virtual void NotifyRemoveRoute (Ipv6Address dst, Ipv6Prefix mask, Ipv6Address nextHop, uint32_t interface, Ipv6Address prefixToUse = Ipv6Address::GetZero ());
+   virtual void SetIpv6 (Ptr<Ipv6> ipv6);
+ 
++  /*
++   * \brief Set the callback for policy based routing
++   * \param callback The pointer to the callback function
++   * \param user_data Pointer to any additional information required for the policy
++   */
++  void SetRouteCallback(RouteCallback callback, void* user_data){
++	  this->callback=callback;
++	  this->user_data=user_data;
++  }
++
+   /**
+    * \brief Print the Routing Table entries
+    *
+@@ -314,6 +332,12 @@ private:
+    * \brief Ipv6 reference.
+    */
+   Ptr<Ipv6> m_ipv6;
++
++  /**
++   * \brief Optional Routing Callback
++   */
++  RouteCallback callback=NULL;
++  void* user_data=NULL;
+ };
+ 
+ } /* namespace ns3 */
+-- 
+1.8.4.2
+

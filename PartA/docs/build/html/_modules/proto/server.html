@@ -1,0 +1,202 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>proto.server &mdash; CS6220 Project 1.0-final documentation</title>
+    
+    <link rel="stylesheet" href="../../_static/default.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '1.0-final',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <script type="text/javascript" src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="top" title="CS6220 Project 1.0-final documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">CS6220 Project 1.0-final documentation</a> &raquo;</li>
+          <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for proto.server</h1><div class="highlight"><pre>
+<span class="kn">from</span> <span class="nn">__future__</span> <span class="kn">import</span> <span class="n">print_function</span>
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="kn">import</span> <span class="nn">ns.core</span>
+<span class="kn">import</span> <span class="nn">ns.internet</span>
+<span class="kn">import</span> <span class="nn">ns.mobility</span>
+<span class="kn">import</span> <span class="nn">ns.applications</span>
+
+
+<div class="viewcode-block" id="TcpRequestHandler"><a class="viewcode-back" href="../../tcpserver.html#proto.server.TcpRequestHandler">[docs]</a><span class="k">class</span> <span class="nc">TcpRequestHandler</span><span class="p">:</span>
+
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Implements a sample TCP request handler</span>
+<span class="sd">    ALL handle methods defined below MUST be implemented to avoid segfaults</span>
+<span class="sd">    (Even if a method needs to do nothing, implement it,</span>
+<span class="sd">    making it a no-op by setting its body to &#39;pass&#39;)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">ip</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Intialize the TcpRequestHandler with instance variables ip</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ip</span> <span class="o">=</span> <span class="n">ip</span>
+        
+
+<div class="viewcode-block" id="TcpRequestHandler.handle_read"><a class="viewcode-back" href="../../tcpserver.html#proto.server.TcpRequestHandler.handle_read">[docs]</a>    <span class="k">def</span> <span class="nf">handle_read</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">data</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Called when new data is received at the socket</span>
+<span class="sd">        Must return a double representing the number of seconds</span>
+<span class="sd">        (in simulation time) after which this server will send data</span>
+
+<span class="sd">        If the server does not currently plan to send data</span>
+<span class="sd">        (or if the incoming TCP request is not yet complete)</span>
+<span class="sd">        this method should return a double less than zero</span>
+<span class="sd">        </span>
+<span class="sd">        :return:  The time after which the server will send data to client</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">client_params</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ip</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;:&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dataSent</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">randstr</span> <span class="o">=</span> <span class="s">&#39;Hello from TCP Server&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">packetDataLength</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">randstr</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">flag</span> <span class="o">=</span> <span class="mi">0</span>
+            
+            
+        <span class="k">return</span> <span class="mi">0</span>
+</div>
+<div class="viewcode-block" id="TcpRequestHandler.handle_send"><a class="viewcode-back" href="../../tcpserver.html#proto.server.TcpRequestHandler.handle_send">[docs]</a>    <span class="k">def</span> <span class="nf">handle_send</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">length</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Called when the socket is ready to accept more data</span>
+<span class="sd">        At most length bytes must be returned</span>
+
+<span class="sd">        If the actual data returned is less than length bytes</span>
+<span class="sd">        the response is assumed to have been sent completely</span>
+<span class="sd">        and the connection is terminated</span>
+<span class="sd">        </span>
+<span class="sd">        :return: Data to be sent to client in the string format</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dataToBeSent</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+        <span class="k">if</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">packetDataLength</span> <span class="o">&gt;</span> <span class="n">length</span><span class="p">):</span>
+            <span class="n">dataToBeSent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">randstr</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dataSent</span><span class="p">:</span><span class="bp">self</span><span class="o">.</span><span class="n">dataSent</span> <span class="o">+</span> <span class="n">length</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataSent</span> <span class="o">+=</span> <span class="n">length</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">packetDataLength</span> <span class="o">-=</span> <span class="n">length</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">dataToBeSent</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">randstr</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">dataSent</span><span class="p">:</span><span class="bp">self</span><span class="o">.</span><span class="n">dataSent</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">packetDataLength</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dataSent</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">packetDataLength</span>
+        <span class="k">return</span> <span class="n">dataToBeSent</span>
+</div>
+<div class="viewcode-block" id="TcpRequestHandler.handle_peer_close"><a class="viewcode-back" href="../../tcpserver.html#proto.server.TcpRequestHandler.handle_peer_close">[docs]</a>    <span class="k">def</span> <span class="nf">handle_peer_close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        This function is called when the peer closes the connection</span>
+
+<span class="sd">        .. note ::</span>
+
+<span class="sd">	    This function will NOT be called when the connection</span>
+<span class="sd">	    closure is initiated by this node by sending less data than requested</span>
+<span class="sd">	    via handle_send</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">&quot;Peer&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ip</span><span class="p">,</span> <span class="s">&quot;closed the connection&quot;</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="TcpRequestHandler.handle_peer_error"><a class="viewcode-back" href="../../tcpserver.html#proto.server.TcpRequestHandler.handle_peer_error">[docs]</a>    <span class="k">def</span> <span class="nf">handle_peer_error</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        This function is called when the connection is being dropped due to</span>
+<span class="sd">        errors.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">&quot;Connection from&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ip</span><span class="p">,</span> <span class="s">&quot;closed due to errors&quot;</span><span class="p">)</span>
+</div>
+    <span class="k">def</span> <span class="nf">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        This function is called when the C side of the code deallocates resources</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">print</span><span class="p">(</span><span class="s">&quot;Handler for connection from&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">ip</span><span class="p">,</span> <span class="s">&quot;died!&quot;</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="TcpServer"><a class="viewcode-back" href="../../tcpserver.html#proto.server.TcpServer">[docs]</a><span class="k">class</span> <span class="nc">TcpServer</span><span class="p">:</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">name</span> <span class="o">=</span> <span class="n">name</span>
+
+<div class="viewcode-block" id="TcpServer.handle_accept"><a class="viewcode-back" href="../../tcpserver.html#proto.server.TcpServer.handle_accept">[docs]</a>    <span class="k">def</span> <span class="nf">handle_accept</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">byte1</span><span class="p">,</span> <span class="n">byte2</span><span class="p">,</span> <span class="n">byte3</span><span class="p">,</span> <span class="n">byte4</span><span class="p">,</span> <span class="n">source_port</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Called when ever there is a connection request from client.</span>
+<span class="sd">        </span>
+<span class="sd">        :return:  :class:`proto.server.TcpRequestHandler` for the client</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">ip</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">byte1</span><span class="p">)</span> <span class="o">+</span> <span class="s">&quot;.&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">byte2</span><span class="p">)</span> <span class="o">+</span> <span class="s">&quot;.&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">byte3</span><span class="p">)</span> <span class="o">+</span> <span class="s">&quot;.&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">byte4</span><span class="p">)</span> <span class="o">+</span> <span class="s">&quot;:&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">source_port</span><span class="p">)</span>
+        <span class="k">print</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">name</span><span class="p">,</span> <span class="s">&quot; received connection request from &quot;</span><span class="p">,</span> <span class="n">ip</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="s">&#39;&#39;</span><span class="p">)</span>
+        <span class="n">handler</span> <span class="o">=</span> <span class="n">TcpRequestHandler</span><span class="p">(</span><span class="n">ip</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">handler</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">CS6220 Project 1.0-final documentation</a> &raquo;</li>
+          <li><a href="../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2014, Sudarshan S, Aditya Kamath and Bhargav Reddy.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.2.2.
+    </div>
+  </body>
+</html>
